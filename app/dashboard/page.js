@@ -2,15 +2,15 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../lib/auth";
-import { logout, checkAndIncrementUsage, LIMITS } from "../../lib/firebase";
+import { logout } from "../../lib/firebase";
 import toast from "react-hot-toast";
 
 const TOOLS = [
-  { id: "chat",      icon: "🧠", label: "AI Chat",         sub: "Gemini 1.5 Flash" },
-  { id: "image",     icon: "🎨", label: "Image Generator",  sub: "Stable Diffusion XL" },
-  { id: "video",     icon: "🎥", label: "Image → Video",    sub: "Pika Labs" },
-  { id: "animation", icon: "🎬", label: "AI Animation",     sub: "Replicate" },
-  { id: "voice",     icon: "🎤", label: "Voice AI",         sub: "Speech API" },
+  { id: "chat",      icon: "💬", label: "New Chat" },
+  { id: "image",     icon: "🎨", label: "Image Generator" },
+  { id: "video",     icon: "🎥", label: "Image → Video" },
+  { id: "animation", icon: "🎬", label: "AI Animation" },
+  { id: "voice",     icon: "🎤", label: "Voice AI" },
 ];
 
 export default function Dashboard() {
@@ -18,240 +18,310 @@ export default function Dashboard() {
   const router = useRouter();
   const [tool, setTool] = useState("chat");
   const [sideOpen, setSideOpen] = useState(true);
+  const [chats, setChats] = useState([
+    { id: 1, title: "Getting started" },
+    { id: 2, title: "Image generation tips" },
+  ]);
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
   }, [user, loading]);
 
-  if (loading || !user) return (
-    <div style={{ height:"100vh", background:"#000", display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <div style={{ textAlign:"center" }}>
-        <div style={{ width:50, height:50, border:"2px solid rgba(0,198,255,0.2)", borderTopColor:"#00c6ff", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 16px" }} />
-        <div style={{ fontFamily:"var(--font-display)", fontSize:12, color:"#606075", letterSpacing:2 }}>LOADING...</div>
-      </div>
-    </div>
-  );
+  if (loading || !user) return <LoadingScreen />;
 
   return (
-    <div style={{ display:"flex", height:"100vh", background:"#000", overflow:"hidden" }}>
-      {/* SIDEBAR */}
-      <div style={{ width:sideOpen?240:0, flexShrink:0, overflow:"hidden", background:"#080808", borderRight:"1px solid rgba(0,198,255,0.1)", display:"flex", flexDirection:"column", transition:"width 0.3s ease" }}>
-        <div style={{ width:240, display:"flex", flexDirection:"column", height:"100%" }}>
-          <div style={{ padding:"18px 16px 14px", borderBottom:"1px solid rgba(0,198,255,0.1)", display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:32, height:32, borderRadius:8, background:"linear-gradient(135deg,#00c6ff,#8a2be2)", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"var(--font-display)", fontWeight:900, fontSize:12, color:"#000" }}>CX</div>
-            <span style={{ fontFamily:"var(--font-display)", fontSize:12, fontWeight:700, letterSpacing:2, background:"linear-gradient(90deg,#00c6ff,#8a2be2)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>COGNORYX</span>
+    <div style={{ display:"flex", height:"100vh", background:"#1a1a1a", color:"#ececec", fontFamily:"var(--font-body)", overflow:"hidden" }}>
+
+      {/* ── SIDEBAR ── */}
+      <div style={{ width:sideOpen?260:0, flexShrink:0, overflow:"hidden", background:"#171717", borderRight:"1px solid #2a2a2a", display:"flex", flexDirection:"column", transition:"width 0.25s ease" }}>
+        <div style={{ width:260, display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
+
+          {/* Logo */}
+          <div style={{ padding:"16px 16px 8px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ width:28, height:28, borderRadius:6, background:"linear-gradient(135deg,#00c6ff,#8a2be2)", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"var(--font-display)", fontWeight:900, fontSize:11, color:"#fff" }}>CX</div>
+              <span style={{ fontFamily:"var(--font-display)", fontSize:13, fontWeight:700, letterSpacing:1, color:"#ececec" }}>COGNORYX</span>
+            </div>
+            <button onClick={() => setSideOpen(false)} style={{ background:"none", border:"none", color:"#666", cursor:"pointer", fontSize:18, padding:4 }}>✕</button>
           </div>
-          <div style={{ flex:1, padding:"12px 8px", overflowY:"auto" }}>
-            <div style={{ fontSize:10, fontFamily:"var(--font-display)", letterSpacing:2, color:"#606075", padding:"6px 8px 10px" }}>TOOLS</div>
-            {TOOLS.map(t => (
-              <div key={t.id} onClick={() => setTool(t.id)} style={{ padding:"10px", margin:"2px 0", borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:10, background:tool===t.id?"rgba(0,198,255,0.08)":"transparent", border:tool===t.id?"1px solid rgba(0,198,255,0.2)":"1px solid transparent", transition:"all 0.15s" }}>
-                <div style={{ width:28, height:28, borderRadius:7, background:tool===t.id?"rgba(0,198,255,0.15)":"#141414", border:"1px solid rgba(0,198,255,0.1)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0 }}>{t.icon}</div>
-                <div>
-                  <div style={{ fontSize:13, fontWeight:600, color:tool===t.id?"#00c6ff":"#9090a8" }}>{t.label}</div>
-                  <div style={{ fontSize:10, color:"#606075" }}>{t.sub}</div>
-                </div>
+
+          {/* New Chat Button */}
+          <div style={{ padding:"8px 12px" }}>
+            <button onClick={() => setTool("chat")} style={{ width:"100%", padding:"10px 14px", borderRadius:8, background:"#2a2a2a", border:"1px solid #333", color:"#ececec", fontSize:14, cursor:"pointer", display:"flex", alignItems:"center", gap:10, transition:"all 0.15s", fontFamily:"var(--font-body)" }}>
+              <span style={{ fontSize:16 }}>✏️</span> New Chat
+            </button>
+          </div>
+
+          {/* Recent Chats */}
+          <div style={{ padding:"8px 12px 4px" }}>
+            <div style={{ fontSize:11, color:"#666", fontWeight:600, letterSpacing:1, textTransform:"uppercase", marginBottom:6, padding:"0 4px" }}>Recent</div>
+            {chats.map(c => (
+              <div key={c.id} style={{ padding:"8px 10px", borderRadius:6, cursor:"pointer", fontSize:13, color:"#aaa", marginBottom:2, transition:"all 0.15s", display:"flex", alignItems:"center", gap:8 }}
+                onMouseEnter={e => e.currentTarget.style.background="#2a2a2a"}
+                onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                <span style={{ fontSize:13 }}>💬</span>
+                <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.title}</span>
               </div>
             ))}
           </div>
-          <div style={{ padding:"12px 14px", borderTop:"1px solid rgba(0,198,255,0.1)" }}>
-            <button onClick={() => router.push("/pricing")} style={{ width:"100%", padding:"8px", marginBottom:6, borderRadius:8, background:"linear-gradient(135deg,#00c6ff,#8a2be2)", border:"none", color:"#000", fontFamily:"var(--font-display)", fontSize:10, fontWeight:700, letterSpacing:1, cursor:"pointer" }}>⚡ UPGRADE TO PRO</button>
-            <button onClick={async () => { await logout(); router.push("/login"); }} style={{ width:"100%", padding:"7px", borderRadius:8, background:"transparent", border:"1px solid rgba(255,100,100,0.2)", color:"#ff6060", fontSize:12, fontWeight:600, cursor:"pointer" }}>Sign Out</button>
+
+          {/* Tools */}
+          <div style={{ padding:"8px 12px 4px", marginTop:8 }}>
+            <div style={{ fontSize:11, color:"#666", fontWeight:600, letterSpacing:1, textTransform:"uppercase", marginBottom:6, padding:"0 4px" }}>Tools</div>
+            {TOOLS.filter(t => t.id !== "chat").map(t => (
+              <div key={t.id} onClick={() => setTool(t.id)}
+                style={{ padding:"8px 10px", borderRadius:6, cursor:"pointer", fontSize:13, color: tool===t.id?"#ececec":"#aaa", marginBottom:2, background: tool===t.id?"#2a2a2a":"transparent", display:"flex", alignItems:"center", gap:8, transition:"all 0.15s" }}
+                onMouseEnter={e => { if(tool!==t.id) e.currentTarget.style.background="#222"; }}
+                onMouseLeave={e => { if(tool!==t.id) e.currentTarget.style.background="transparent"; }}>
+                <span>{t.icon}</span> {t.label}
+              </div>
+            ))}
+          </div>
+
+          {/* Bottom */}
+          <div style={{ marginTop:"auto", padding:"12px", borderTop:"1px solid #2a2a2a" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:8, marginBottom:6 }}>
+              <div style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#00c6ff,#8a2be2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, color:"#fff", flexShrink:0 }}>
+                {user?.email?.[0]?.toUpperCase() || "U"}
+              </div>
+              <div style={{ overflow:"hidden" }}>
+                <div style={{ fontSize:13, color:"#ececec", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user?.displayName || user?.email?.split("@")[0]}</div>
+                <div style={{ fontSize:11, color:"#666" }}>Free Plan</div>
+              </div>
+            </div>
+            <button onClick={() => router.push("/pricing")} style={{ width:"100%", padding:"8px", borderRadius:6, background:"linear-gradient(135deg,#00c6ff,#8a2be2)", border:"none", color:"#fff", fontSize:12, fontWeight:600, cursor:"pointer", marginBottom:6 }}>⚡ Upgrade to Pro</button>
+            <button onClick={async () => { await logout(); router.push("/login"); }} style={{ width:"100%", padding:"7px", borderRadius:6, background:"transparent", border:"1px solid #333", color:"#888", fontSize:12, cursor:"pointer" }}>Sign Out</button>
           </div>
         </div>
       </div>
 
-      {/* MAIN */}
-      <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
-        <div style={{ height:54, borderBottom:"1px solid rgba(0,198,255,0.1)", display:"flex", alignItems:"center", padding:"0 20px", gap:14, background:"#080808", flexShrink:0 }}>
-          <button onClick={() => setSideOpen(!sideOpen)} style={{ background:"none", border:"none", color:"#606075", fontSize:18, cursor:"pointer" }}>☰</button>
-          <div>
-            <div style={{ fontFamily:"var(--font-display)", fontSize:13, fontWeight:700, color:"#e8e8f0", letterSpacing:1 }}>{TOOLS.find(t=>t.id===tool)?.label}</div>
-            <div style={{ fontSize:11, color:"#606075" }}>{TOOLS.find(t=>t.id===tool)?.sub}</div>
-          </div>
-          <div style={{ marginLeft:"auto", width:30, height:30, borderRadius:"50%", background:"linear-gradient(135deg,rgba(0,198,255,0.2),rgba(138,43,226,0.2))", border:"1px solid rgba(0,198,255,0.3)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#00c6ff", fontFamily:"var(--font-display)" }}>
-            {user?.displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U"}
-          </div>
+      {/* ── MAIN ── */}
+      <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"#1a1a1a" }}>
+
+        {/* Top bar */}
+        <div style={{ height:52, display:"flex", alignItems:"center", padding:"0 20px", gap:12, borderBottom:"1px solid #2a2a2a", flexShrink:0 }}>
+          {!sideOpen && (
+            <button onClick={() => setSideOpen(true)} style={{ background:"none", border:"none", color:"#888", cursor:"pointer", fontSize:18, display:"flex", padding:4 }}>☰</button>
+          )}
+          <span style={{ fontSize:14, color:"#aaa", fontWeight:500 }}>
+            {TOOLS.find(t => t.id === tool)?.label || "AI Chat"}
+          </span>
         </div>
-        <main style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}>
-          {tool === "chat"      && <ChatView user={user} profile={profile} />}
-          {tool === "image"     && <ImageView user={user} />}
-          {tool === "video"     && <VideoView user={user} />}
+
+        {/* Content */}
+        <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}>
+          {tool === "chat"      && <ChatView user={user} />}
+          {tool === "image"     && <ImageView />}
+          {tool === "video"     && <VideoView />}
           {tool === "animation" && <AnimationView />}
           {tool === "voice"     && <VoiceView />}
-        </main>
+        </div>
       </div>
     </div>
   );
 }
 
-function ChatView({ user, profile }) {
+// ── CHAT ────────────────────────────────────────────────────
+function ChatView({ user }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [filePreview, setFilePreview] = useState(null);
   const [fileBase64, setFileBase64] = useState(null);
   const [fileType, setFileType] = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
+  const [fileName, setFileName] = useState(null);
   const bottomRef = useRef(null);
   const fileRef = useRef(null);
+  const textareaRef = useRef(null);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [messages, typing]);
 
-  const handleFile = (e) => {
-    const f = e.target.files[0];
-    if (!f) return;
+  const handleFile = e => {
+    const f = e.target.files[0]; if (!f) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      const base64 = ev.target.result;
-      setFileBase64(base64);
-      setUploadedFile(f.name);
+    reader.onload = ev => {
+      setFileBase64(ev.target.result);
       setFileType(f.type);
-      if (f.type.startsWith("image/")) {
-        setFilePreview(base64);
-      } else {
-        setFilePreview(null);
-      }
+      setFileName(f.name);
+      if (f.type.startsWith("image/")) setFilePreview(ev.target.result);
     };
     reader.readAsDataURL(f);
   };
 
-  const removeFile = () => {
-    setUploadedFile(null);
-    setFilePreview(null);
-    setFileBase64(null);
-    setFileType(null);
-    if (fileRef.current) fileRef.current.value = "";
-  };
+  const removeFile = () => { setFileBase64(null); setFileType(null); setFilePreview(null); setFileName(null); if (fileRef.current) fileRef.current.value = ""; };
 
   const send = async () => {
-    if (!input.trim() && !fileBase64 || typing) return;
-    const text = input || "Please analyze this file.";
-    const preview = filePreview;
-    const fname = uploadedFile;
-
-    setMessages(m => [...m, {
-      role: "user",
-      text,
-      filePreview: preview,
-      fileName: fname,
-    }]);
-    setInput(""); setTyping(true);
-    removeFile();
-
+    if ((!input.trim() && !fileBase64) || typing) return;
+    const text = input || "Analyze this file.";
+    const prev = filePreview; const fn = fileName;
+    setMessages(m => [...m, { role:"user", text, filePreview:prev, fileName:fn }]);
+    setInput(""); removeFile(); setTyping(true);
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: text,
-          fileBase64: fileBase64,
-          fileType: fileType,
-        }),
-      });
+      const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ message:text, fileBase64, fileType }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setMessages(m => [...m, { role:"ai", text: data.reply }]);
-    } catch(e) { toast.error(e.message || "AI error"); }
+      setMessages(m => [...m, { role:"ai", text:data.reply }]);
+    } catch(e) { toast.error(e.message || "Error"); }
     setTyping(false);
   };
 
+  const suggestions = [
+    { icon:"💡", text:"Explain quantum computing" },
+    { icon:"🐍", text:"Write a Python function" },
+    { icon:"🚀", text:"Give me startup ideas" },
+    { icon:"🖼️", text:"Analyze an image" },
+  ];
+
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
-      <div style={{ flex:1, overflowY:"auto", padding:"20px 0" }}>
-        {messages.length === 0 && (
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"100%", gap:20, padding:40, textAlign:"center" }}>
-            <div style={{ fontSize:48 }}>🧠</div>
-            <div style={{ fontFamily:"var(--font-display)", fontSize:22, fontWeight:700, background:"linear-gradient(90deg,#00c6ff,#8a2be2)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>COGNORYX AI</div>
-            <p style={{ color:"#9090a8", fontSize:14, maxWidth:400 }}>Ask me anything or upload an image/document for analysis.</p>
-            <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"center" }}>
-              {["Explain quantum computing","Write a Python function","Give me startup ideas","Analyze this image"].map(s => (
-                <div key={s} onClick={() => setInput(s)} style={{ padding:"8px 14px", borderRadius:20, background:"#0f0f0f", border:"1px solid rgba(0,198,255,0.12)", fontSize:13, color:"#9090a8", cursor:"pointer" }}>{s}</div>
+      <div style={{ flex:1, overflowY:"auto", padding:"0 0 20px" }}>
+        {messages.length === 0 ? (
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"100%", padding:40, textAlign:"center", gap:24 }}>
+            <div style={{ width:56, height:56, borderRadius:16, background:"linear-gradient(135deg,#00c6ff22,#8a2be222)", border:"1px solid #333", display:"flex", alignItems:"center", justifyContent:"center", fontSize:24 }}>🧠</div>
+            <div>
+              <h2 style={{ fontFamily:"var(--font-display)", fontSize:24, fontWeight:700, color:"#ececec", marginBottom:8, letterSpacing:1 }}>How can I help you?</h2>
+              <p style={{ color:"#888", fontSize:15 }}>Ask anything, upload images, or use the tools on the left.</p>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:10, maxWidth:500, width:"100%" }}>
+              {suggestions.map(s => (
+                <div key={s.text} onClick={() => { setInput(s.text); textareaRef.current?.focus(); }}
+                  style={{ padding:"14px 16px", borderRadius:10, background:"#222", border:"1px solid #2a2a2a", cursor:"pointer", textAlign:"left", transition:"all 0.15s" }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor="#444"}
+                  onMouseLeave={e => e.currentTarget.style.borderColor="#2a2a2a"}>
+                  <div style={{ fontSize:18, marginBottom:6 }}>{s.icon}</div>
+                  <div style={{ fontSize:13, color:"#ccc" }}>{s.text}</div>
+                </div>
               ))}
             </div>
           </div>
-        )}
-        {messages.map((m,i) => (
-          <div key={i} style={{ display:"flex", padding:"10px 20px", gap:12, flexDirection:m.role==="user"?"row-reverse":"row" }}>
-            <div style={{ width:30, height:30, borderRadius:"50%", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, fontFamily:"var(--font-display)", background:m.role==="ai"?"rgba(0,198,255,0.15)":"rgba(138,43,226,0.15)", border:`1px solid ${m.role==="ai"?"rgba(0,198,255,0.3)":"rgba(138,43,226,0.3)"}`, color:m.role==="ai"?"#00c6ff":"#8a2be2" }}>
-              {m.role==="ai"?"CX":(user?.email?.[0]?.toUpperCase()||"U")}
-            </div>
-            <div style={{ maxWidth:"70%", display:"flex", flexDirection:"column", gap:6 }}>
-              {m.filePreview && (
-                <img src={m.filePreview} alt="uploaded" style={{ maxWidth:200, borderRadius:8, border:"1px solid rgba(0,198,255,0.2)" }} />
-              )}
-              {m.fileName && !m.filePreview && (
-                <div style={{ padding:"8px 12px", borderRadius:8, background:"rgba(0,198,255,0.08)", border:"1px solid rgba(0,198,255,0.2)", fontSize:12, color:"#00c6ff" }}>📄 {m.fileName}</div>
-              )}
-              <div style={{ padding:"11px 15px", borderRadius:12, background:m.role==="ai"?"#0f0f0f":"rgba(0,198,255,0.08)", border:`1px solid ${m.role==="ai"?"rgba(0,198,255,0.1)":"rgba(0,198,255,0.2)"}`, fontSize:14, lineHeight:1.7, color:"#e8e8f0", whiteSpace:"pre-wrap" }}>{m.text}</div>
-            </div>
+        ) : (
+          <div style={{ maxWidth:720, margin:"0 auto", padding:"20px 20px 0" }}>
+            {messages.map((m,i) => (
+              <div key={i} style={{ marginBottom:24, display:"flex", gap:14, flexDirection: m.role==="user"?"row-reverse":"row" }}>
+                <div style={{ width:32, height:32, borderRadius:"50%", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, background: m.role==="ai"?"#2a2a2a":"linear-gradient(135deg,#00c6ff,#8a2be2)", color: m.role==="ai"?"#00c6ff":"#fff", border: m.role==="ai"?"1px solid #333":"none" }}>
+                  {m.role==="ai"?"CX":(user?.email?.[0]?.toUpperCase()||"U")}
+                </div>
+                <div style={{ maxWidth:"80%", display:"flex", flexDirection:"column", gap:6, alignItems: m.role==="user"?"flex-end":"flex-start" }}>
+                  {m.filePreview && <img src={m.filePreview} style={{ maxWidth:240, borderRadius:10, border:"1px solid #333" }} />}
+                  {m.fileName && !m.filePreview && <div style={{ padding:"8px 12px", borderRadius:8, background:"#222", border:"1px solid #333", fontSize:12, color:"#aaa" }}>📄 {m.fileName}</div>}
+                  <div style={{ padding:"12px 16px", borderRadius:12, background: m.role==="ai"?"#222":"#2a5a8a", fontSize:14, lineHeight:1.8, color:"#ececec", whiteSpace:"pre-wrap", borderTopLeftRadius: m.role==="ai"?4:12, borderTopRightRadius: m.role==="user"?4:12 }}>{m.text}</div>
+                </div>
+              </div>
+            ))}
+            {typing && (
+              <div style={{ display:"flex", gap:14, marginBottom:24 }}>
+                <div style={{ width:32, height:32, borderRadius:"50%", background:"#2a2a2a", border:"1px solid #333", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, color:"#00c6ff", fontWeight:700 }}>CX</div>
+                <div style={{ padding:"14px 18px", borderRadius:12, background:"#222", display:"flex", gap:5, alignItems:"center" }}>
+                  {[0,1,2].map(i => <div key={i} style={{ width:7, height:7, borderRadius:"50%", background:"#666", animation:"pulse 1.2s infinite", animationDelay:`${i*0.2}s` }} />)}
+                </div>
+              </div>
+            )}
+            <div ref={bottomRef} />
           </div>
-        ))}
-        {typing && (
-          <div style={{ display:"flex", padding:"10px 20px", gap:12 }}>
-            <div style={{ width:30, height:30, borderRadius:"50%", background:"rgba(0,198,255,0.15)", border:"1px solid rgba(0,198,255,0.3)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, color:"#00c6ff", fontFamily:"var(--font-display)" }}>CX</div>
-            <div style={{ padding:"12px 16px", borderRadius:12, background:"#0f0f0f", border:"1px solid rgba(0,198,255,0.1)", display:"flex", gap:5 }}>
-              {[0,1,2].map(i => <div key={i} style={{ width:7, height:7, borderRadius:"50%", background:"#00c6ff", animation:"pulse 1.2s infinite", animationDelay:`${i*0.2}s`, opacity:0.4 }} />)}
-            </div>
-          </div>
         )}
-        <div ref={bottomRef} />
       </div>
 
-      {/* FILE PREVIEW */}
-      {uploadedFile && (
-        <div style={{ margin:"0 16px 8px", padding:"10px 14px", background:"#0f0f0f", border:"1px solid rgba(0,198,255,0.2)", borderRadius:10, display:"flex", alignItems:"center", gap:10 }}>
-          {filePreview ? (
-            <img src={filePreview} style={{ width:40, height:40, borderRadius:6, objectFit:"cover" }} />
-          ) : (
-            <span style={{ fontSize:24 }}>📄</span>
+      {/* Input */}
+      <div style={{ padding:"16px 20px 20px", flexShrink:0 }}>
+        <div style={{ maxWidth:720, margin:"0 auto" }}>
+          {/* File preview */}
+          {fileName && (
+            <div style={{ marginBottom:8, padding:"8px 12px", background:"#222", border:"1px solid #333", borderRadius:8, display:"flex", alignItems:"center", gap:10 }}>
+              {filePreview ? <img src={filePreview} style={{ width:36, height:36, borderRadius:6, objectFit:"cover" }} /> : <span>📄</span>}
+              <span style={{ fontSize:13, color:"#aaa", flex:1 }}>{fileName}</span>
+              <button onClick={removeFile} style={{ background:"none", border:"none", color:"#666", cursor:"pointer", fontSize:16 }}>✕</button>
+            </div>
           )}
-          <span style={{ fontSize:13, color:"#9090a8", flex:1 }}>{uploadedFile}</span>
-          <button onClick={removeFile} style={{ background:"none", border:"none", color:"#ff6060", cursor:"pointer", fontSize:16 }}>✕</button>
+          <div style={{ background:"#222", border:"1px solid #333", borderRadius:14, padding:"12px 14px", display:"flex", gap:10, alignItems:"flex-end", transition:"border-color 0.2s" }}
+            onFocus={() => {}} >
+            <button onClick={() => fileRef.current?.click()} style={{ width:32, height:32, borderRadius:8, background:"#2a2a2a", border:"1px solid #333", color:"#888", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:16, transition:"all 0.15s" }}
+              onMouseEnter={e => e.currentTarget.style.color="#ececec"}
+              onMouseLeave={e => e.currentTarget.style.color="#888"}>📎</button>
+            <input ref={fileRef} type="file" accept="image/*,.pdf,.txt" style={{ display:"none" }} onChange={handleFile} />
+            <textarea ref={textareaRef} value={input} onChange={e => { setInput(e.target.value); e.target.style.height="auto"; e.target.style.height=Math.min(e.target.scrollHeight,160)+"px"; }}
+              onKeyDown={e => e.key==="Enter"&&!e.shiftKey&&(e.preventDefault(),send())}
+              placeholder="Message COGNORYX..." rows={1}
+              style={{ flex:1, background:"transparent", border:"none", outline:"none", color:"#ececec", fontFamily:"var(--font-body)", fontSize:15, resize:"none", lineHeight:1.6, maxHeight:160, minHeight:24 }} />
+            <button onClick={send} disabled={typing||(!input.trim()&&!fileBase64)}
+              style={{ width:34, height:34, borderRadius:9, background: typing||(!input.trim()&&!fileBase64)?"#2a2a2a":"linear-gradient(135deg,#00c6ff,#8a2be2)", border:"none", color: typing||(!input.trim()&&!fileBase64)?"#555":"#fff", cursor: typing||(!input.trim()&&!fileBase64)?"not-allowed":"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all 0.2s" }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            </button>
+          </div>
+          <p style={{ textAlign:"center", fontSize:11, color:"#555", marginTop:8 }}>COGNORYX can make mistakes. Verify important information.</p>
         </div>
-      )}
+      </div>
+    </div>
+  );
+}
 
-      {/* INPUT */}
-      <div style={{ padding:"12px 16px 16px", borderTop:"1px solid rgba(0,198,255,0.1)", background:"#080808", flexShrink:0 }}>
-        <div style={{ display:"flex", gap:10, background:"#0f0f0f", border:"1px solid rgba(0,198,255,0.15)", borderRadius:10, padding:"10px 12px" }}>
-          {/* Upload button */}
-          <button onClick={() => fileRef.current?.click()} style={{ width:34, height:34, borderRadius:8, background:"rgba(0,198,255,0.08)", border:"1px solid rgba(0,198,255,0.2)", color:"#00c6ff", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:16 }}>📎</button>
-          <input ref={fileRef} type="file" accept="image/*,.pdf,.txt,.doc,.docx" style={{ display:"none" }} onChange={handleFile} />
+// ── IMAGE ────────────────────────────────────────────────────
+function ImageView() {
+  const [prompt, setPrompt] = useState("");
+  const [images, setImages] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-          <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key==="Enter"&&!e.shiftKey&&(e.preventDefault(),send())} placeholder="Message COGNORYX or upload a file..." rows={1} style={{ flex:1, background:"transparent", border:"none", outline:"none", color:"#e8e8f0", fontFamily:"var(--font-body)", fontSize:15, resize:"none", lineHeight:1.5 }} />
-          <button onClick={send} disabled={typing||(!input.trim()&&!fileBase64)} style={{ width:34, height:34, borderRadius:8, background:"linear-gradient(135deg,#00c6ff,#8a2be2)", border:"none", color:"#000", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", opacity:typing||(!input.trim()&&!fileBase64)?0.5:1, flexShrink:0 }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+  const generate = async () => {
+    if (!prompt.trim()) { toast.error("Enter a prompt"); return; }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/image", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ prompt }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setImages(p => [data.imageUrl, ...p]);
+      toast.success("Image generated!");
+    } catch(e) { toast.error(e.message || "Failed"); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ flex:1, overflowY:"auto", padding:28 }}>
+      <div style={{ maxWidth:680, margin:"0 auto" }}>
+        <div style={{ textAlign:"center", marginBottom:28 }}>
+          <h2 style={{ fontSize:22, fontWeight:700, color:"#ececec", marginBottom:6 }}>Image Generator</h2>
+          <p style={{ color:"#888", fontSize:14 }}>Create stunning AI images from text descriptions</p>
+        </div>
+        <div style={{ background:"#222", border:"1px solid #2a2a2a", borderRadius:14, padding:20, marginBottom:20 }}>
+          <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="A futuristic neon cityscape at night, cyberpunk, ultra detailed..." rows={3}
+            style={{ width:"100%", background:"#1a1a1a", border:"1px solid #333", borderRadius:8, padding:"11px 13px", color:"#ececec", fontFamily:"var(--font-body)", fontSize:14, outline:"none", resize:"vertical", marginBottom:14 }} />
+          <button onClick={generate} disabled={loading}
+            style={{ padding:"10px 24px", borderRadius:8, background: loading?"#2a2a2a":"linear-gradient(135deg,#00c6ff,#8a2be2)", border:"none", color: loading?"#666":"#fff", fontSize:13, fontWeight:600, cursor: loading?"not-allowed":"pointer", transition:"all 0.2s" }}>
+            {loading ? "Generating..." : "Generate Image"}
           </button>
         </div>
-        <p style={{ textAlign:"center", fontSize:11, color:"#606075", marginTop:8 }}>Supports images, PDFs, and documents</p>
+        {loading && (
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:12, marginBottom:20 }}>
+            {[0,1].map(i => <div key={i} style={{ aspectRatio:1, borderRadius:10, background:"#222", animation:"pulse 1.5s infinite" }} />)}
+          </div>
+        )}
+        {images.length > 0 && (
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:12 }}>
+            {images.map((url,i) => (
+              <div key={i} style={{ aspectRatio:1, borderRadius:10, overflow:"hidden", position:"relative", border:"1px solid #2a2a2a" }}>
+                <img src={url} alt="AI" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                <a href={url} download={`cognoryx-${i}.png`} style={{ position:"absolute", bottom:8, right:8, padding:"5px 10px", borderRadius:6, background:"rgba(0,0,0,0.7)", color:"#fff", fontSize:11, fontWeight:600 }}>↓ Save</a>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
+// ── VIDEO ────────────────────────────────────────────────────
 function VideoView() {
   return (
-    <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:40, textAlign:"center" }}>
-      <div style={{ fontSize:60, marginBottom:20 }}>🎥</div>
-      <div style={{ fontFamily:"var(--font-display)", fontSize:22, fontWeight:700, background:"linear-gradient(90deg,#00c6ff,#8a2be2)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", letterSpacing:2, marginBottom:12 }}>VIDEO GENERATION</div>
-      <div style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"6px 16px", borderRadius:20, background:"rgba(255,170,0,0.08)", border:"1px solid rgba(255,170,0,0.2)", color:"#ffaa00", fontSize:12, fontFamily:"var(--font-display)", letterSpacing:2, marginBottom:20 }}>
-        ⚡ COMING SOON
-      </div>
-      <p style={{ color:"#9090a8", fontSize:15, maxWidth:440, lineHeight:1.8, marginBottom:28 }}>
-        AI video generation is coming very soon. We are integrating the best video AI models to bring your images to life.
-      </p>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:12, maxWidth:600, width:"100%" }}>
-        {["Kling AI","Pika Labs","RunwayML","Stable Video"].map(f => (
-          <div key={f} style={{ padding:"14px 16px", borderRadius:10, background:"#080808", border:"1px solid rgba(0,198,255,0.08)", fontSize:13, color:"#606075" }}>
-            🎬 {f}
-          </div>
-        ))}
-      </div>
-      <p style={{ color:"#606075", fontSize:12, marginTop:28 }}>
-        Use AI Animation in the meantime — it generates beautiful animated clips!
-      </p>
+    <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:40, textAlign:"center", gap:16 }}>
+      <div style={{ fontSize:48 }}>🎥</div>
+      <h2 style={{ fontSize:22, fontWeight:700, color:"#ececec" }}>Video Generation</h2>
+      <div style={{ padding:"6px 16px", borderRadius:20, background:"#2a2a2a", color:"#ffaa00", fontSize:12, fontWeight:600 }}>⚡ COMING SOON</div>
+      <p style={{ color:"#888", fontSize:14, maxWidth:400, lineHeight:1.7 }}>AI video generation is coming very soon. We are integrating the best video AI models.</p>
     </div>
   );
 }
+
+// ── ANIMATION ────────────────────────────────────────────────
 function AnimationView() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -267,14 +337,14 @@ function AnimationView() {
     toast.success("Animation generated!");
     setTimeout(() => {
       const canvas = canvasRef.current; if (!canvas) return;
-      const W = canvas.width = canvas.offsetWidth; const H = canvas.height = 320;
+      const W = canvas.width = canvas.offsetWidth; const H = canvas.height = 360;
       const ctx = canvas.getContext("2d");
       let f = 0;
-      const pts = Array.from({length:50},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.8,vy:(Math.random()-.5)*.8,r:2+Math.random()*5}));
+      const pts = Array.from({length:60},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.8,vy:(Math.random()-.5)*.8,r:1+Math.random()*4}));
       clearInterval(timerRef.current);
       timerRef.current = setInterval(() => {
-        ctx.fillStyle="rgba(0,0,0,0.12)"; ctx.fillRect(0,0,W,H); f++;
-        pts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=(f%60<30?"#00c6ff":"#8a2be2")+"88";ctx.fill();});
+        ctx.fillStyle="rgba(26,26,26,0.15)"; ctx.fillRect(0,0,W,H); f++;
+        pts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=(f%60<30?"#00c6ff":"#8a2be2")+"99";ctx.fill();});
       }, 33);
     }, 100);
   };
@@ -284,24 +354,37 @@ function AnimationView() {
   return (
     <div style={{ flex:1, overflowY:"auto", padding:28 }}>
       <div style={{ maxWidth:680, margin:"0 auto" }}>
-        <h1 style={{ fontFamily:"var(--font-display)", fontSize:20, background:"linear-gradient(90deg,#00c6ff,#8a2be2)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", letterSpacing:2, textAlign:"center", marginBottom:24 }}>AI ANIMATION</h1>
-        <div style={{ background:"#080808", border:"1px solid rgba(0,198,255,0.12)", borderRadius:14, padding:22, marginBottom:20 }}>
-          <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="A glowing neural network pulsing with energy..." rows={3} style={{ width:"100%", background:"#0f0f0f", border:"1px solid rgba(0,198,255,0.12)", borderRadius:8, padding:"11px 13px", color:"#e8e8f0", fontFamily:"var(--font-body)", fontSize:14, outline:"none", resize:"vertical", marginBottom:14 }} />
-          <button onClick={generate} disabled={loading} style={{ padding:"11px 28px", borderRadius:8, background:"linear-gradient(135deg,#00c6ff,#8a2be2)", border:"none", color:"#000", fontFamily:"var(--font-display)", fontSize:11, fontWeight:700, letterSpacing:1.5, cursor:"pointer", opacity:loading?0.6:1 }}>
-            {loading?"RENDERING...":"GENERATE ANIMATION"}
+        <div style={{ textAlign:"center", marginBottom:28 }}>
+          <h2 style={{ fontSize:22, fontWeight:700, color:"#ececec", marginBottom:6 }}>AI Animation</h2>
+          <p style={{ color:"#888", fontSize:14 }}>Generate animated clips from text descriptions</p>
+        </div>
+        <div style={{ background:"#222", border:"1px solid #2a2a2a", borderRadius:14, padding:20, marginBottom:20 }}>
+          <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="A glowing neural network pulsing with energy..." rows={3}
+            style={{ width:"100%", background:"#1a1a1a", border:"1px solid #333", borderRadius:8, padding:"11px 13px", color:"#ececec", fontFamily:"var(--font-body)", fontSize:14, outline:"none", resize:"vertical", marginBottom:14 }} />
+          <button onClick={generate} disabled={loading}
+            style={{ padding:"10px 24px", borderRadius:8, background:loading?"#2a2a2a":"linear-gradient(135deg,#00c6ff,#8a2be2)", border:"none", color:loading?"#666":"#fff", fontSize:13, fontWeight:600, cursor:loading?"not-allowed":"pointer" }}>
+            {loading?"Generating...":"Generate Animation"}
           </button>
         </div>
-        {result && <div style={{ background:"#080808", border:"1px solid rgba(0,198,255,0.12)", borderRadius:14, overflow:"hidden" }}><canvas ref={canvasRef} style={{ width:"100%", display:"block" }} /></div>}
+        {result && (
+          <div style={{ borderRadius:14, overflow:"hidden", border:"1px solid #2a2a2a" }}>
+            <canvas ref={canvasRef} style={{ width:"100%", display:"block" }} />
+            <div style={{ padding:"10px 14px", background:"#222", display:"flex", gap:10 }}>
+              <button onClick={() => { const a = document.createElement("a"); a.href = canvasRef.current.toDataURL(); a.download="animation.png"; a.click(); }} style={{ padding:"7px 16px", borderRadius:6, background:"#2a2a2a", border:"1px solid #333", color:"#aaa", fontSize:12, cursor:"pointer" }}>↓ Save Frame</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
+// ── VOICE ────────────────────────────────────────────────────
 function VoiceView() {
   const [active, setActive] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [response, setResponse] = useState("");
-  const [status, setStatus] = useState("Click mic to start");
+  const [status, setStatus] = useState("Click the mic to start speaking");
   const recRef = useRef(null);
 
   const toggle = () => active ? stop() : start();
@@ -311,7 +394,7 @@ function VoiceView() {
     if (!SR) { toast.error("Use Chrome or Edge for voice support"); return; }
     const rec = new SR(); rec.continuous = false; rec.interimResults = true; rec.lang = "en-US";
     recRef.current = rec;
-    rec.onstart = () => { setActive(true); setStatus("🔴 Listening..."); setTranscript(""); };
+    rec.onstart = () => { setActive(true); setStatus("Listening..."); setTranscript(""); };
     rec.onresult = e => {
       let final = "", interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -327,18 +410,18 @@ function VoiceView() {
   };
 
   const stop = () => {
-    setActive(false); setStatus("Click mic to start");
+    setActive(false); setStatus("Click the mic to start speaking");
     try { recRef.current?.stop(); } catch {}
   };
 
-  const processVoice = async (text) => {
-    setStatus("⚡ Thinking..."); setResponse("");
+  const processVoice = async text => {
+    setStatus("Thinking..."); setResponse("");
     try {
-      const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ message: text }) });
+      const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ message:text }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setResponse(data.reply); setStatus("✓ Done");
-    } catch { setStatus("Error"); toast.error("AI response failed"); }
+      setResponse(data.reply); setStatus("Done");
+    } catch { setStatus("Error"); toast.error("Failed"); }
   };
 
   const speak = () => {
@@ -349,19 +432,43 @@ function VoiceView() {
   };
 
   return (
-    <div style={{ flex:1, overflowY:"auto", display:"flex", flexDirection:"column", alignItems:"center", padding:"40px 20px", gap:24 }}>
-      <h1 style={{ fontFamily:"var(--font-display)", fontSize:20, background:"linear-gradient(90deg,#00c6ff,#8a2be2)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", letterSpacing:2 }}>VOICE AI</h1>
-      <div onClick={toggle} style={{ width:120, height:120, borderRadius:"50%", border:`2px solid ${active?"#00c6ff":"rgba(0,198,255,0.2)"}`, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", boxShadow:active?"0 0 40px rgba(0,198,255,0.4)":"none", transition:"all 0.3s" }}>
-        <div style={{ width:76, height:76, borderRadius:"50%", background:active?"rgba(0,198,255,0.2)":"rgba(0,198,255,0.06)", border:"1px solid rgba(0,198,255,0.3)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:28 }}>🎤</div>
+    <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:40, gap:24 }}>
+      <div style={{ textAlign:"center" }}>
+        <h2 style={{ fontSize:22, fontWeight:700, color:"#ececec", marginBottom:6 }}>Voice AI</h2>
+        <p style={{ color:"#888", fontSize:14 }}>Speak naturally and get AI responses</p>
       </div>
-      <p style={{ color:"#9090a8", fontSize:14 }}>{status}</p>
-      {transcript && <div style={{ width:"100%", maxWidth:560, background:"#0f0f0f", border:"1px solid rgba(0,198,255,0.12)", borderRadius:10, padding:"13px 15px", fontSize:14, color:"#e8e8f0" }}>{transcript}</div>}
-      {response && (
+
+      <div onClick={toggle} style={{ width:100, height:100, borderRadius:"50%", border:`2px solid ${active?"#00c6ff":"#333"}`, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", background: active?"rgba(0,198,255,0.1)":"#222", transition:"all 0.3s", boxShadow: active?"0 0 30px rgba(0,198,255,0.3)":"none" }}>
+        <span style={{ fontSize:36 }}>{active?"🔴":"🎤"}</span>
+      </div>
+
+      <p style={{ color:"#888", fontSize:14 }}>{status}</p>
+
+      {transcript && (
         <div style={{ width:"100%", maxWidth:560 }}>
-          <div style={{ background:"rgba(0,198,255,0.04)", border:"1px solid rgba(0,198,255,0.12)", borderRadius:10, padding:"13px 15px", fontSize:14, color:"#e8e8f0", lineHeight:1.6 }}>{response}</div>
-          <button onClick={speak} style={{ marginTop:10, padding:"8px 18px", borderRadius:8, background:"transparent", border:"1px solid rgba(0,198,255,0.25)", color:"#00c6ff", fontSize:13, fontWeight:600, cursor:"pointer" }}>🔊 Read Aloud</button>
+          <div style={{ fontSize:11, color:"#666", marginBottom:6, fontWeight:600, textTransform:"uppercase", letterSpacing:1 }}>You said</div>
+          <div style={{ background:"#222", border:"1px solid #2a2a2a", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#ececec", lineHeight:1.7 }}>{transcript}</div>
         </div>
       )}
+
+      {response && (
+        <div style={{ width:"100%", maxWidth:560 }}>
+          <div style={{ fontSize:11, color:"#666", marginBottom:6, fontWeight:600, textTransform:"uppercase", letterSpacing:1 }}>COGNORYX responds</div>
+          <div style={{ background:"#222", border:"1px solid #2a2a2a", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#ececec", lineHeight:1.7 }}>{response}</div>
+          <button onClick={speak} style={{ marginTop:10, padding:"8px 16px", borderRadius:8, background:"transparent", border:"1px solid #333", color:"#aaa", fontSize:13, cursor:"pointer" }}>🔊 Read Aloud</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <div style={{ height:"100vh", background:"#1a1a1a", display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ textAlign:"center" }}>
+        <div style={{ width:40, height:40, border:"2px solid #333", borderTopColor:"#00c6ff", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 16px" }} />
+        <div style={{ fontSize:13, color:"#666" }}>Loading...</div>
+      </div>
     </div>
   );
 }
