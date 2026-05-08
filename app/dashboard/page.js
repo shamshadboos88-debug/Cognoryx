@@ -381,20 +381,69 @@ function AnimationView() {
 
 // ── VOICE ────────────────────────────────────────────────────
 function VoiceView() {
-  const [active, setActive] = useState(false);
+  const [callState, setCallState] = useState("idle"); // idle, calling, active, thinking
   const [transcript, setTranscript] = useState("");
   const [response, setResponse] = useState("");
-  const [status, setStatus] = useState("Click the mic to start speaking");
+  const [messages, setMessages] = useState([]);
+  const [duration, setDuration] = useState(0);
   const recRef = useRef(null);
+  const timerRef = useRef(null);
+  const synthRef = useRef(null);
 
-  const toggle = () => active ? stop() : start();
+  useEffect(() => () => {
+    clearInterval(timerRef.current);
+    window.speechSynthesis?.cancel();
+  }, []);
 
-  const start = () => {
+  const startCall = () => {
+    setCallState("calling");
+    setMessages([]);
+    setTranscript("");
+    setResponse("");
+    setDuration(0);
+    setTimeout(() => {
+      setCallState("active");
+      timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
+      speak("Hello! I am COGNORYX AI. How can I help you today?", () => {
+        startListening();
+      });
+    }, 2000);
+  };
+
+  const endCall = () => {
+    setCallState("idle");
+    clearInterval(timerRef.current);
+    setDuration(0);
+    window.speechSynthesis?.cancel();
+    try { recRef.current?.stop(); } catch {}
+    setTranscript("");
+    setResponse("");
+  };
+
+  const speak = (text, onEnd) => {
+    window.speechSynthesis?.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "en-US";
+    u.rate = 1;
+    u.pitch = 1;
+    u.volume = 1;
+    // Pick best voice
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v => v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Female"));
+    if (preferred) u.voice = preferred;
+    u.onend = () => { if (onEnd) onEnd(); };
+    window.speechSynthesis.speak(u);
+  };
+
+  const startListening = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { toast.error("Use Chrome or Edge for voice support"); return; }
-    const rec = new SR(); rec.continuous = false; rec.interimResults = true; rec.lang = "en-US";
+    const rec = new SR();
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.lang = "en-US";
     recRef.current = rec;
-    rec.onstart = () => { setActive(true); setStatus("Listening..."); setTranscript(""); };
+
     rec.onresult = e => {
       let final = "", interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -404,60 +453,151 @@ function VoiceView() {
       setTranscript(final || interim);
       if (final) processVoice(final);
     };
-    rec.onerror = e => { toast.error("Mic error: " + e.error); stop(); };
-    rec.onend = stop;
-    rec.start();
-  };
 
-  const stop = () => {
-    setActive(false); setStatus("Click the mic to start speaking");
-    try { recRef.current?.stop(); } catch {}
+    rec.onerror = e => {
+      if (e.error !== "no-speech") toast.error("Mic error: " + e.error);
+      if (callState === "active") setTimeout(startListening, 1000);
+    };
+
+    rec.onend = () => {
+      if (callState === "active") setTimeout(startListening, 500);
+    };
+
+    try { rec.start(); } catch {}
   };
 
   const processVoice = async text => {
-    setStatus("Thinking..."); setResponse("");
+    setCallState("thinking");
+    setMessages(m => [...m, { role: "user", text }]);
+    setTranscript("");
     try {
-      const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ message:text }) });
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setResponse(data.reply); setStatus("Done");
-    } catch { setStatus("Error"); toast.error("Failed"); }
+      setMessages(m => [...m, { role: "ai", text: data.reply }]);
+      setResponse(data.reply);
+      setCallState("active");
+      speak(data.reply, () => {
+        startListening();
+      });
+    } catch (e) {
+      toast.error("AI error"); setCallState("active");
+      startListening();
+    }
   };
 
-  const speak = () => {
-    if (!response) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(response);
-    u.lang = "en-US"; window.speechSynthesis.speak(u);
-  };
+  const formatTime = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
 
-  return (
-    <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:40, gap:24 }}>
+  // IDLE SCREEN
+  if (callState === "idle") return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:40, gap:24, background:"#1a1a1a" }}>
       <div style={{ textAlign:"center" }}>
-        <h2 style={{ fontSize:22, fontWeight:700, color:"#ececec", marginBottom:6 }}>Voice AI</h2>
-        <p style={{ color:"#888", fontSize:14 }}>Speak naturally and get AI responses</p>
+        <div style={{ fontSize:60, marginBottom:12 }}>🤖</div>
+        <h2 style={{ fontSize:24, fontWeight:700, color:"#ececec", marginBottom:8 }}>Talk to COGNORYX</h2>
+        <p style={{ color:"#888", fontSize:15, maxWidth:380, lineHeight:1.7 }}>Have a real conversation with AI. Speak naturally and COGNORYX will respond with voice — just like a phone call.</p>
       </div>
 
-      <div onClick={toggle} style={{ width:100, height:100, borderRadius:"50%", border:`2px solid ${active?"#00c6ff":"#333"}`, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", background: active?"rgba(0,198,255,0.1)":"#222", transition:"all 0.3s", boxShadow: active?"0 0 30px rgba(0,198,255,0.3)":"none" }}>
-        <span style={{ fontSize:36 }}>{active?"🔴":"🎤"}</span>
+      <div style={{ display:"flex", flexDirection:"column", gap:10, width:"100%", maxWidth:320 }}>
+        {["Ask anything you want", "Get instant voice responses", "Natural conversation flow", "Hands-free AI experience"].map(f => (
+          <div key={f} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:"#222", borderRadius:10, border:"1px solid #2a2a2a" }}>
+            <span style={{ color:"#00c6ff" }}>✓</span>
+            <span style={{ fontSize:13, color:"#aaa" }}>{f}</span>
+          </div>
+        ))}
       </div>
 
-      <p style={{ color:"#888", fontSize:14 }}>{status}</p>
+      {/* Call button */}
+      <button onClick={startCall} style={{ width:80, height:80, borderRadius:"50%", background:"linear-gradient(135deg,#00c655,#00a844)", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:32, boxShadow:"0 0 30px rgba(0,198,85,0.4)", transition:"all 0.2s" }}
+        onMouseEnter={e => e.currentTarget.style.transform="scale(1.1)"}
+        onMouseLeave={e => e.currentTarget.style.transform="scale(1)"}>
+        📞
+      </button>
+      <p style={{ color:"#666", fontSize:13 }}>Tap to start call</p>
+    </div>
+  );
 
-      {transcript && (
-        <div style={{ width:"100%", maxWidth:560 }}>
-          <div style={{ fontSize:11, color:"#666", marginBottom:6, fontWeight:600, textTransform:"uppercase", letterSpacing:1 }}>You said</div>
-          <div style={{ background:"#222", border:"1px solid #2a2a2a", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#ececec", lineHeight:1.7 }}>{transcript}</div>
-        </div>
-      )}
+  // CALLING SCREEN
+  if (callState === "calling") return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:20, background:"#1a1a1a" }}>
+      <div style={{ width:100, height:100, borderRadius:"50%", background:"linear-gradient(135deg,#00c6ff,#8a2be2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:40, animation:"pulse 1s infinite" }}>🤖</div>
+      <div style={{ textAlign:"center" }}>
+        <div style={{ fontSize:18, fontWeight:600, color:"#ececec", marginBottom:6 }}>COGNORYX AI</div>
+        <div style={{ fontSize:14, color:"#888" }}>Connecting...</div>
+      </div>
+      <div style={{ display:"flex", gap:6 }}>
+        {[0,1,2].map(i => <div key={i} style={{ width:8, height:8, borderRadius:"50%", background:"#00c6ff", animation:"pulse 1s infinite", animationDelay:`${i*0.2}s` }} />)}
+      </div>
+      <button onClick={endCall} style={{ width:60, height:60, borderRadius:"50%", background:"#ff4444", border:"none", cursor:"pointer", fontSize:24, marginTop:20, boxShadow:"0 0 20px rgba(255,68,68,0.4)" }}>📵</button>
+    </div>
+  );
 
-      {response && (
-        <div style={{ width:"100%", maxWidth:560 }}>
-          <div style={{ fontSize:11, color:"#666", marginBottom:6, fontWeight:600, textTransform:"uppercase", letterSpacing:1 }}>COGNORYX responds</div>
-          <div style={{ background:"#222", border:"1px solid #2a2a2a", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#ececec", lineHeight:1.7 }}>{response}</div>
-          <button onClick={speak} style={{ marginTop:10, padding:"8px 16px", borderRadius:8, background:"transparent", border:"1px solid #333", color:"#aaa", fontSize:13, cursor:"pointer" }}>🔊 Read Aloud</button>
+  // ACTIVE / THINKING CALL SCREEN
+  return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", background:"#1a1a1a", overflow:"hidden" }}>
+
+      {/* Call header */}
+      <div style={{ padding:"16px 20px", background:"#222", borderBottom:"1px solid #2a2a2a", display:"flex", alignItems:"center", gap:14, flexShrink:0 }}>
+        <div style={{ width:44, height:44, borderRadius:"50%", background:"linear-gradient(135deg,#00c6ff,#8a2be2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, boxShadow: callState==="active"?"0 0 20px rgba(0,198,255,0.4)":"none" }}>🤖</div>
+        <div>
+          <div style={{ fontSize:15, fontWeight:600, color:"#ececec" }}>COGNORYX AI</div>
+          <div style={{ fontSize:12, color: callState==="thinking"?"#ffaa00":"#00c655" }}>
+            {callState === "thinking" ? "⚡ Thinking..." : `🟢 ${formatTime(duration)}`}
+          </div>
         </div>
-      )}
+        <div style={{ marginLeft:"auto", display:"flex", gap:10 }}>
+          <button onClick={endCall} style={{ width:44, height:44, borderRadius:"50%", background:"#ff4444", border:"none", cursor:"pointer", fontSize:20, boxShadow:"0 0 16px rgba(255,68,68,0.4)", display:"flex", alignItems:"center", justifyContent:"center" }}>📵</button>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div style={{ flex:1, overflowY:"auto", padding:"16px 20px", display:"flex", flexDirection:"column", gap:12 }}>
+        {messages.length === 0 && (
+          <div style={{ textAlign:"center", color:"#555", fontSize:14, marginTop:40 }}>
+            <div style={{ fontSize:32, marginBottom:12 }}>🎤</div>
+            Start speaking — COGNORYX is listening...
+          </div>
+        )}
+        {messages.map((m, i) => (
+          <div key={i} style={{ display:"flex", gap:10, flexDirection: m.role==="user"?"row-reverse":"row", alignItems:"flex-start" }}>
+            <div style={{ width:32, height:32, borderRadius:"50%", flexShrink:0, background: m.role==="ai"?"linear-gradient(135deg,#00c6ff,#8a2be2)":"#333", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14 }}>
+              {m.role==="ai"?"🤖":"🧑"}
+            </div>
+            <div style={{ maxWidth:"75%", padding:"10px 14px", borderRadius:12, background: m.role==="ai"?"#222":"#2a5a8a", fontSize:14, color:"#ececec", lineHeight:1.7, borderTopLeftRadius: m.role==="ai"?4:12, borderTopRightRadius: m.role==="user"?4:12 }}>
+              {m.text}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom mic status */}
+      <div style={{ padding:"16px 20px", background:"#222", borderTop:"1px solid #2a2a2a", flexShrink:0 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:12 }}>
+          {callState === "active" ? (
+            <>
+              <div style={{ display:"flex", gap:4, alignItems:"center" }}>
+                {[1,2,3,4,5].map(i => (
+                  <div key={i} style={{ width:4, background:"#00c6ff", borderRadius:2, animation:"pulse 0.8s infinite", animationDelay:`${i*0.1}s`, height: `${8 + Math.random()*16}px` }} />
+                ))}
+              </div>
+              <span style={{ fontSize:13, color:"#00c6ff" }}>Listening...</span>
+              <div style={{ display:"flex", gap:4, alignItems:"center" }}>
+                {[5,4,3,2,1].map(i => (
+                  <div key={i} style={{ width:4, background:"#00c6ff", borderRadius:2, animation:"pulse 0.8s infinite", animationDelay:`${i*0.1}s`, height: `${8 + Math.random()*16}px` }} />
+                ))}
+              </div>
+            </>
+          ) : (
+            <span style={{ fontSize:13, color:"#ffaa00" }}>⚡ Processing your request...</span>
+          )}
+        </div>
+        {transcript && (
+          <div style={{ textAlign:"center", marginTop:8, fontSize:13, color:"#888", fontStyle:"italic" }}>"{transcript}"</div>
+        )}
+      </div>
     </div>
   );
 }
