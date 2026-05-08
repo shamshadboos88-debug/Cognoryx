@@ -18,7 +18,17 @@
     { "src": "/icons/icon-512x512.png", "sizes": "512x512", "type": "image/png", "form_factor": "narrow", "label": "COGNORYX Dashboard" }
   ],
   "shortcuts": [
-    { "name": "AI Chat", "short_name": "Chat", "url": "/dashboard", "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }] },
-    { "name": "Image Generator", "short_name": "Images", "url": "/dashboard", "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }] }
+    {
+      "name": "AI Chat",
+      "short_name": "Chat",
+      "url": "/dashboard",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Image Generator",
+      "short_name": "Images",
+      "url": "/dashboard",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    }
   ]
 }
