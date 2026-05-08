@@ -10,7 +10,7 @@ const TOOLS = [
   { id: "image",     icon: "🎨", label: "Image Generator" },
   { id: "video",     icon: "🎥", label: "Image → Video" },
   { id: "animation", icon: "🎬", label: "AI Animation" },
-  { id: "voice",     icon: "🎤", label: "Voice AI" },
+  { id: "voice", icon: "🎤", label: "Talk with COGNORYX" },
 ];
 
 export default function Dashboard() {
