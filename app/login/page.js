@@ -7,7 +7,8 @@ import toast from "react-hot-toast";
 import Link from "next/link";
 
 export default function LoginPage() {
-  const { user } = useAuth();
+  const auth = useAuth();
+const user = auth?.user;
   const router = useRouter();
   const [tab, setTab]     = useState("login");
   const [name, setName]   = useState("");

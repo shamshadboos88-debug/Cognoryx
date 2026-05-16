@@ -1,135 +1,176 @@
-import { NextResponse } from "next/server";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 
-const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+// ================= GEMINI =================
+const gemini = process.env.GEMINI_API_KEY
+  ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+  : null;
 
-export async function POST(request) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not set." }, { status: 500 });
+// ================= GROQ =================
+const groq = process.env.GROQ_API_KEY
+  ? new OpenAI({
+      apiKey: process.env.GROQ_API_KEY,
+      baseURL: "https://api.groq.com/openai/v1",
+    })
+  : null;
 
-  let message, fileBase64, fileType;
+// ================= DEEPSEEK =================
+const deepseek = process.env.DEEPSEEK_API_KEY
+  ? new OpenAI({
+      apiKey: process.env.DEEPSEEK_API_KEY,
+      baseURL: "https://api.deepseek.com",
+    })
+  : null;
+
+export async function POST(req) {
+
   try {
-    const body = await request.json();
-    message    = body?.message?.trim();
-    fileBase64 = body?.fileBase64;
-    fileType   = body?.fileType;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
-  }
 
-  if (!message && !fileBase64) {
-    return NextResponse.json({ error: "Message or file is required." }, { status: 400 });
-  }
+    const body = await req.json();
 
-  try {
-    const parts = [];
+    const {
+      message,
+      attachment,
+    } = body;
 
-    // Add image if provided
-    if (fileBase64 && fileType && fileType.startsWith("image/")) {
-      // Clean base64 - remove data URL prefix
-      const base64Clean = fileBase64.includes(",")
-        ? fileBase64.split(",")[1]
-        : fileBase64;
+    // =====================================================
+    // 1. TRY GEMINI
+    // =====================================================
 
-      // Validate size - Gemini max is 4MB base64
-      if (base64Clean.length > 4000000) {
-        return NextResponse.json({ 
-          error: "Image too large. Please use an image under 3MB." 
-        }, { status: 400 });
+    try {
+
+      if (!gemini) {
+        throw new Error("Gemini API key missing");
       }
 
-      parts.push({
-        inlineData: {
-          mimeType: fileType,
-          data: base64Clean,
-        }
+      const model = gemini.getGenerativeModel({
+        model: "gemini-1.5-flash",
       });
-    }
 
-    // Add PDF if provided
-    if (fileBase64 && fileType === "application/pdf") {
-      const base64Clean = fileBase64.includes(",")
-        ? fileBase64.split(",")[1]
-        : fileBase64;
-      parts.push({
-        inlineData: {
-          mimeType: "application/pdf",
-          data: base64Clean,
-        }
-      });
-    }
+      let result;
 
-    // Add text message
-    parts.push({
-      text: message || "Please analyze this and describe what you see in detail."
-    });
+      // ===== FILE SUPPORT =====
+      if (attachment) {
 
-    console.log("[/api/chat] Parts count:", parts.length, "Has file:", !!fileBase64);
+        result = await model.generateContent([
+          {
+            inlineData: {
+              data: attachment.base64,
+              mimeType: attachment.type,
+            },
+          },
+          {
+            text: message || "Analyze this file",
+          },
+        ]);
 
-    const res = await fetch(`${GEMINI_ENDPOINT}?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{
-          role: "user",
-          parts: parts
-        }],
-        systemInstruction: {
-          parts: [{
-            text: `You are COGNORYX, an advanced AI assistant created by Kisan Mahendra Sahu, the founder and CEO of COGNORYX. COGNORYX is an all-in-one AI platform built in India. 
+      } else {
 
-Key facts about you:
-- Your name is COGNORYX
-- You were created by Kisan Mahendra Sahu
-- You are built and owned by COGNORYX AI, India
-- You can chat, analyze images, generate content, and much more
-- You are powered by advanced AI technology
-- You should NEVER say you are made by Google, Anthropic, or any other company
-- Always say you are COGNORYX AI, created by Kisan Mahendra Sahu
+        result = await model.generateContent(
+          message || "Hello"
+        );
 
-When someone asks who made you, who your founder is, or who owns you — always say:
-"I am COGNORYX AI, founded and created by Kisan Kumar Mahendra Sahu, founder and CEO of COGNORYX AI."
-
-You can see and analyze images perfectly. When given an image with math problems or text, read and solve everything you see. Be helpful, intelligent, and concise.`
-          }]
-        },
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 2048,
-        }
-      }),
-    });
-
-    const responseText = await res.text();
-    console.log("[/api/chat] Status:", res.status);
-
-    if (!res.ok) {
-      console.error("[/api/chat] Error:", responseText);
-      // Parse error message from Gemini
-      try {
-        const errData = JSON.parse(responseText);
-        const errMsg = errData?.error?.message || "AI service error.";
-        return NextResponse.json({ error: errMsg }, { status: 502 });
-      } catch {
-        return NextResponse.json({ error: "AI service error." }, { status: 502 });
       }
+
+      return Response.json({
+        reply: result.response.text(),
+        provider: "Gemini",
+      });
+
+    } catch (err) {
+
+      console.error("[Gemini Error]", err.message);
+
     }
 
-    const data = JSON.parse(responseText);
-    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    // =====================================================
+    // 2. TRY GROQ
+    // =====================================================
 
-    if (!reply) {
-      console.error("[/api/chat] No reply in response");
-      return NextResponse.json({ error: "No response generated." }, { status: 502 });
+    try {
+
+      if (!groq) {
+        throw new Error("Groq API key missing");
+      }
+
+      const completion =
+        await groq.chat.completions.create({
+          model: "llama-3.1-8b-instant",
+          messages: [
+            {
+              role: "user",
+              content: message || "Hello",
+            },
+          ],
+        });
+
+      return Response.json({
+        reply:
+          completion.choices[0].message.content,
+        provider: "Groq",
+      });
+
+    } catch (err) {
+
+      console.error("[Groq Error]", err.message);
+
     }
 
-    return NextResponse.json({ reply }, { status: 200 });
+    // =====================================================
+    // 3. TRY DEEPSEEK
+    // =====================================================
 
-  } catch (e) {
-    console.error("[/api/chat] Exception:", e.message);
-    return NextResponse.json({ error: e.message }, { status: 502 });
+    try {
+
+      if (!deepseek) {
+        throw new Error("DeepSeek API key missing");
+      }
+
+      const completion =
+        await deepseek.chat.completions.create({
+          model: "deepseek-chat",
+          messages: [
+            {
+              role: "user",
+              content: message || "Hello",
+            },
+          ],
+        });
+
+      return Response.json({
+        reply:
+          completion.choices[0].message.content,
+        provider: "DeepSeek",
+      });
+
+    } catch (err) {
+
+      console.error("[DeepSeek Error]", err.message);
+
+    }
+
+    // =====================================================
+    // ALL FAILED
+    // =====================================================
+
+    return Response.json({
+      reply:
+        "⚠️ All AI providers are currently unavailable.",
+    });
+
+  } catch (error) {
+
+    console.error("[Route Error]", error);
+
+    return Response.json(
+      {
+        error: "AI request failed",
+      },
+      {
+        status: 500,
+      }
+    );
+
   }
-}
 
-export async function GET() {
-  return NextResponse.json({ error: "Use POST." }, { status: 405 });
 }
