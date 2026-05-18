@@ -2,18 +2,18 @@
   "name": "COGNORYX - AI Intelligence Platform",
   "short_name": "COGNORYX",
   "description": "All-in-one AI platform: chat with AI, generate images, create videos, and have live voice conversations.",
-  "start_url": "/dashboard",
-  "id": "/dashboard",
+  "start_url": "/",
+  "id": "/",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone", "minimal-ui", "browser"],
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "background_color": "#0a0a0f",
   "theme_color": "#00c6ff",
-  "orientation": "portrait-primary",
+  "orientation": "portrait",
   "scope": "/",
   "lang": "en-US",
   "dir": "ltr",
   "categories": ["productivity", "utilities"],
-  "iarc_rating_id": "e84b072d-71b3-4d3e-86ae-31a8ce4e53b7",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icons/icon-192x192.png",
@@ -46,21 +46,21 @@
       "sizes": "512x512",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "COGNORYX AI Chat Dashboard"
+      "label": "COGNORYX AI Chat"
     },
     {
       "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "COGNORYX Desktop View"
+      "label": "COGNORYX Desktop"
     }
   ],
   "shortcuts": [
     {
       "name": "AI Chat",
       "short_name": "Chat",
-      "description": "Start a new AI chat conversation",
+      "description": "Start a new AI conversation",
       "url": "/dashboard",
       "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192", "type": "image/png" }]
     },
@@ -68,17 +68,15 @@
       "name": "Image Generator",
       "short_name": "Images",
       "description": "Generate AI images",
-      "url": "/dashboard?tool=image",
+      "url": "/dashboard",
       "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Live AI Call",
       "short_name": "Live",
-      "description": "Start a live voice conversation with Aria",
-      "url": "/dashboard?tool=live",
+      "description": "Talk to Aria live",
+      "url": "/dashboard",
       "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192", "type": "image/png" }]
     }
-  ],
-  "prefer_related_applications": false,
-  "related_applications": []
+  ]
 }
