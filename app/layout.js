@@ -1,12 +1,13 @@
-// app/layout.js — optimized for performance
+// app/layout.js — optimized for performance + splash screen
 import './globals.css';
+import SplashWrapper from '../components/SplashWrapper';
 
 export const metadata = {
   title: 'COGNORYX — AI Intelligence Platform',
   description: 'All-in-one AI platform: chat, generate images, create videos, and have live voice conversations with AI.',
   keywords: 'AI, artificial intelligence, chatbot, image generation, voice AI, COGNORYX',
-  authors: [{ name: 'COGNORYX' }],
-  creator: 'COGNORYX',
+  authors: [{ name: 'COGNORYX' }, { name: 'Kisan' }],
+  creator: 'Kisan',
   publisher: 'COGNORYX',
   manifest: '/manifest.json',
   appleWebApp: {
@@ -56,25 +57,17 @@ export default function RootLayout({ children }) {
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://firebaseapp.com" />
         <link rel="dns-prefetch" href="https://googleapis.com" />
-
-        {/* PWA Android */}
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="application-name" content="COGNORYX" />
-
-        {/* PWA iOS */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="COGNORYX" />
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
         <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512x512.png" />
-
-        {/* PWA Windows */}
         <meta name="msapplication-TileImage" content="/icons/icon-512x512.png" />
         <meta name="msapplication-TileColor" content="#00c6ff" />
         <meta name="msapplication-tap-highlight" content="no" />
         <meta name="theme-color" content="#00c6ff" />
-
-        {/* Critical CSS inline for fast FCP */}
         <style dangerouslySetInnerHTML={{ __html: `
           *{box-sizing:border-box;margin:0;padding:0}
           html{background:#000;color:#e8e8f0}
@@ -82,9 +75,7 @@ export default function RootLayout({ children }) {
         `}} />
       </head>
       <body>
-        {children}
-
-        {/* Deferred SW registration — after page load */}
+        <SplashWrapper>{children}</SplashWrapper>
         <script dangerouslySetInnerHTML={{
           __html: `
             window.addEventListener('load', function() {
@@ -98,7 +89,6 @@ export default function RootLayout({ children }) {
                     .catch(function(e) { console.log('[SW] Failed:', e); });
                 }, 1000);
               }
-
               window.addEventListener('beforeinstallprompt', function(e) {
                 e.preventDefault();
                 window._installPrompt = e;
