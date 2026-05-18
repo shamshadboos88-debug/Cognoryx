@@ -4,6 +4,7 @@
 import { useState, useRef, useEffect } from "react";
 import toast from "react-hot-toast";
 import styles from "./tools.module.css";
+import CognoryxThinking from "./CognoryxThinking";
 
 export default function ChatTool({
   user,
@@ -55,42 +56,27 @@ export default function ChatTool({
 
     const utt = new SpeechSynthesisUtterance(clean);
 
-    const voices =
-      window.speechSynthesis.getVoices();
+    const voices = window.speechSynthesis.getVoices();
 
     const femaleVoice =
       voices.find(
         (v) =>
           v.name.includes("Female") ||
           v.name.includes("Samantha") ||
-          v.name.includes(
-            "Google UK English Female"
-          ) ||
-          v.name.includes(
-            "Microsoft Zira"
-          )
+          v.name.includes("Google UK English Female") ||
+          v.name.includes("Microsoft Zira")
       ) ||
-      voices.find((v) =>
-        v.lang.startsWith("en")
-      ) ||
+      voices.find((v) => v.lang.startsWith("en")) ||
       voices[0];
 
-    if (femaleVoice) {
-      utt.voice = femaleVoice;
-    }
+    if (femaleVoice) utt.voice = femaleVoice;
 
     utt.rate = 1;
     utt.pitch = 1.1;
     utt.lang = "en-US";
-
-    utt.onstart = () =>
-      setSpeaking(index);
-
-    utt.onend = () =>
-      setSpeaking(null);
-
-    utt.onerror = () =>
-      setSpeaking(null);
+    utt.onstart = () => setSpeaking(index);
+    utt.onend = () => setSpeaking(null);
+    utt.onerror = () => setSpeaking(null);
 
     window.speechSynthesis.speak(utt);
   };
@@ -100,57 +86,32 @@ export default function ChatTool({
   // =========================
   const handleFile = (e) => {
     const file = e.target.files?.[0];
-
     if (!file) return;
 
     const maxMB = 10;
-
-    if (
-      file.size >
-      maxMB * 1024 * 1024
-    ) {
-      toast.error(
-        `File too large. Max ${maxMB}MB`
-      );
+    if (file.size > maxMB * 1024 * 1024) {
+      toast.error(`File too large. Max ${maxMB}MB`);
       return;
     }
 
     const reader = new FileReader();
-
     reader.onload = (ev) => {
-      const base64 =
-        ev.target.result.split(",")[1];
-
-      setAttachment({
-        name: file.name,
-        base64,
-        type: file.type,
-      });
-
-      toast.success(
-        `📎 ${file.name} attached`
-      );
+      const base64 = ev.target.result.split(",")[1];
+      setAttachment({ name: file.name, base64, type: file.type });
+      toast.success(`📎 ${file.name} attached`);
     };
-
     reader.readAsDataURL(file);
-
     e.target.value = "";
   };
 
-  const removeAttachment = () =>
-    setAttachment(null);
+  const removeAttachment = () => setAttachment(null);
 
   // =========================
   // SEND MESSAGE
   // =========================
   const send = async () => {
     const text = input.trim();
-
-    if (
-      (!text && !attachment) ||
-      loading
-    )
-      return;
+    if ((!text && !attachment) || loading) return;
 
     if (atLimit) {
       onUpgrade?.();
@@ -158,31 +119,19 @@ export default function ChatTool({
     }
 
     const userContent =
-      text +
-      (attachment
-        ? `\n\n📎 Attached: ${attachment.name}`
-        : "");
+      text + (attachment ? `\n\n📎 Attached: ${attachment.name}` : "");
 
-    const userMsg = {
-      role: "user",
-      content: userContent,
-    };
-
+    const userMsg = { role: "user", content: userContent };
     setMessages((m) => [...m, userMsg]);
-
     setInput("");
 
     const att = attachment;
-
     setAttachment(null);
-
     setLoading(true);
 
     try {
-      // ✅ SEND BODY
       const body = {
-        message:
-          text || "Analyze this file",
+        message: text || "Analyze this file",
         uid: user?.uid,
         provider,
       };
@@ -195,59 +144,34 @@ export default function ChatTool({
         };
       }
 
-      const res = await fetch(
-        "/api/chat",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify(body),
-        }
-      );
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
 
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "API error");
 
-      if (!res.ok) {
-        throw new Error(
-          data.error || "API error"
-        );
-      }
-
-      const aiMsg = {
-        role: "ai",
-        content: data.reply,
-      };
-
+      const aiMsg = { role: "ai", content: data.reply };
       setMessages((m) => [...m, aiMsg]);
 
       if (messages.length === 0) {
         setHistory((h) => [
           {
             id: Date.now(),
-            title:
-              (
-                text || att?.name
-              ).slice(0, 36) + "…",
+            title: (text || att?.name).slice(0, 36) + "…",
           },
           ...h.slice(0, 9),
         ]);
       }
     } catch (err) {
-      toast.error(
-        err.message ||
-          "Failed to get response"
-      );
-
+      toast.error(err.message || "Failed to get response");
       setMessages((m) => [
         ...m,
         {
           role: "ai",
-          content:
-            "⚠️ Error: " +
-            (err.message ||
-              "Something went wrong."),
+          content: "⚠️ Error: " + (err.message || "Something went wrong."),
         },
       ]);
     } finally {
@@ -260,30 +184,12 @@ export default function ChatTool({
   // =========================
   const formatText = (text) =>
     text
-      .replace(
-        /\*\*(.+?)\*\*/g,
-        "<strong>$1</strong>"
-      )
-      .replace(
-        /`([^`\n]+)`/g,
-        "<code>$1</code>"
-      )
-      .replace(
-        /^### (.+)$/gm,
-        "<h4>$1</h4>"
-      )
-      .replace(
-        /^## (.+)$/gm,
-        "<h3>$1</h3>"
-      )
-      .replace(
-        /^- (.+)$/gm,
-        "<li>$1</li>"
-      )
-      .replace(
-        /(<li>[\s\S]*?<\/li>)/g,
-        "<ul>$1</ul>"
-      )
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+      .replace(/^### (.+)$/gm, "<h4>$1</h4>")
+      .replace(/^## (.+)$/gm, "<h3>$1</h3>")
+      .replace(/^- (.+)$/gm, "<li>$1</li>")
+      .replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>")
       .replace(/\n/g, "<br>");
 
   return (
@@ -291,13 +197,8 @@ export default function ChatTool({
       <div className={styles.chatMain}>
         <div className={styles.chatTopbar}>
           <div>
-            <div className={styles.toolTitle}>
-              COGNORYX AI
-            </div>
-
-            <div className={styles.toolSub}>
-              Multi AI Platform
-            </div>
+            <div className={styles.toolTitle}>COGNORYX AI</div>
+            <div className={styles.toolSub}>Multi AI Platform</div>
           </div>
         </div>
 
@@ -307,75 +208,38 @@ export default function ChatTool({
             <div
               key={i}
               className={`${styles.msgRow} ${
-                m.role === "user"
-                  ? styles.msgUser
-                  : ""
+                m.role === "user" ? styles.msgUser : ""
               }`}
             >
               <div
                 className={`${styles.avatar} ${
-                  m.role === "user"
-                    ? styles.avatarUser
-                    : styles.avatarAi
+                  m.role === "user" ? styles.avatarUser : styles.avatarAi
                 }`}
               >
-                {m.role === "user"
-                  ? "U"
-                  : "CX"}
+                {m.role === "user" ? "U" : "CX"}
               </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 4,
-                  maxWidth: "75%",
-                }}
-              >
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxWidth: "75%" }}>
                 <div
                   className={`${styles.bubble} ${
-                    m.role === "user"
-                      ? styles.bubbleUser
-                      : styles.bubbleAi
+                    m.role === "user" ? styles.bubbleUser : styles.bubbleAi
                   }`}
-                  dangerouslySetInnerHTML={{
-                    __html: formatText(
-                      m.content
-                    ),
-                  }}
+                  dangerouslySetInnerHTML={{ __html: formatText(m.content) }}
                 />
 
                 {m.role === "ai" && (
-                  <button
-                    onClick={() =>
-                      speak(
-                        m.content,
-                        i
-                      )
-                    }
-                  >
-                    {speaking === i
-                      ? "⏹ Stop"
-                      : "🔊 Listen"}
+                  <button onClick={() => speak(m.content, i)}>
+                    {speaking === i ? "⏹ Stop" : "🔊 Listen"}
                   </button>
                 )}
               </div>
             </div>
           ))}
 
+          {/* ✅ COGNORYX HEARTBEAT ANIMATION — shows while AI is replying */}
           {loading && (
             <div className={styles.msgRow}>
-              <div
-                className={`${styles.avatar} ${styles.avatarAi}`}
-              >
-                CX
-              </div>
-
-              <div className={styles.typing}>
-                <span />
-                <span />
-                <span />
-              </div>
+              <CognoryxThinking />
             </div>
           )}
 
@@ -386,14 +250,7 @@ export default function ChatTool({
         {attachment && (
           <div>
             📎 {attachment.name}
-
-            <button
-              onClick={
-                removeAttachment
-              }
-            >
-              ✕
-            </button>
+            <button onClick={removeAttachment}>✕</button>
           </div>
         )}
 
@@ -411,41 +268,22 @@ export default function ChatTool({
             {/* AI SELECTOR */}
             <select
               value={provider}
-              onChange={(e) =>
-                setProvider(
-                  e.target.value
-                )
-              }
+              onChange={(e) => setProvider(e.target.value)}
               style={{
                 background: "#111",
                 color: "#fff",
-                border:
-                  "1px solid rgba(255,255,255,0.1)",
+                border: "1px solid rgba(255,255,255,0.1)",
                 borderRadius: 8,
                 padding: "6px 10px",
               }}
             >
-              <option value="gemini">
-                Gemini
-              </option>
-
-              <option value="deepseek">
-                DeepSeek
-              </option>
-
-              <option value="groq">
-                Groq
-              </option>
+              <option value="gemini">Gemini</option>
+              <option value="deepseek">DeepSeek</option>
+              <option value="groq">Groq</option>
             </select>
 
             {/* Attachment */}
-            <button
-              onClick={() =>
-                fileRef.current?.click()
-              }
-            >
-              📎
-            </button>
+            <button onClick={() => fileRef.current?.click()}>📎</button>
 
             {/* Input */}
             <textarea
@@ -454,16 +292,9 @@ export default function ChatTool({
               placeholder="Message COGNORYX..."
               value={input}
               rows={1}
-              onChange={(e) =>
-                setInput(
-                  e.target.value
-                )
-              }
+              onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
-                if (
-                  e.key === "Enter" &&
-                  !e.shiftKey
-                ) {
+                if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   send();
                 }
@@ -471,23 +302,13 @@ export default function ChatTool({
             />
 
             {/* Live Call */}
-            <button
-              onClick={() =>
-                onLiveClick?.()
-              }
-            >
-              📹
-            </button>
+            <button onClick={() => onLiveClick?.()}>📹</button>
 
             {/* Send */}
             <button
               className={styles.sendBtn}
               onClick={send}
-              disabled={
-                loading ||
-                (!input.trim() &&
-                  !attachment)
-              }
+              disabled={loading || (!input.trim() && !attachment)}
             >
               ➤
             </button>
