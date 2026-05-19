@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import dynamic from 'next/dynamic';
+import CognoryxThinking from '@/components/CognoryxThinking';
 
 const LiveTool  = dynamic(() => import('@/components/LiveTool'),  { ssr: false });
 const ImageTool = dynamic(() => import('@/components/ImageTool'), { ssr: false });
@@ -39,7 +40,6 @@ export default function Dashboard() {
     router.push('/login');
   };
 
-  // ── Text-to-Speech ─────────────────────────────────────────
   const speak = (text, index) => {
     window.speechSynthesis.cancel();
     if (speaking === index) { setSpeaking(null); return; }
@@ -59,7 +59,6 @@ export default function Dashboard() {
     window.speechSynthesis.speak(utt);
   };
 
-  // ── File attachment ─────────────────────────────────────────
   const handleFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -72,7 +71,6 @@ export default function Dashboard() {
     e.target.value = '';
   };
 
-  // ── Send message ────────────────────────────────────────────
   const send = async () => {
     const text = input.trim();
     if (!text && !attachment) return;
@@ -127,7 +125,6 @@ export default function Dashboard() {
   return (
     <div style={{ display:'flex', height:'100vh', background:'#0f0f13', color:'#e8e8f0', fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', overflow:'hidden' }}>
 
-      {/* ── Live AI Overlay ── */}
       {showLive && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
           <div style={{ width:'100%', maxWidth:580, height:'88vh', background:'#0d0d16', borderRadius:20, border:'1px solid rgba(255,255,255,0.1)', display:'flex', flexDirection:'column', overflow:'hidden', position:'relative' }}>
@@ -137,7 +134,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── Sidebar ── */}
+      {/* Sidebar */}
       <aside style={{ width:200, background:'#0d0d14', borderRight:'1px solid rgba(255,255,255,0.07)', display:'flex', flexDirection:'column', flexShrink:0, padding:'12px 0' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'4px 14px 12px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -186,19 +183,16 @@ export default function Dashboard() {
         </div>
       </aside>
 
-      {/* ── Main ── */}
+      {/* Main */}
       <main style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
         <div style={{ padding:'14px 20px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontSize:14, color:'rgba(255,255,255,0.7)' }}>
           {activeTool==='chat' ? 'New Chat' : TOOLS.find(t=>t.id===activeTool)?.label || 'New Chat'}
         </div>
 
-        {/* ── Image Tool ── */}
         {activeTool === 'image' ? (
           <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column' }}>
             <ImageTool />
           </div>
-
-        /* ── Other tools coming soon ── */
         ) : activeTool !== 'chat' ? (
           <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', color:'rgba(255,255,255,0.3)' }}>
             <div style={{ textAlign:'center' }}>
@@ -207,11 +201,8 @@ export default function Dashboard() {
               <div style={{ fontSize:13, marginTop:6, opacity:0.5 }}>Coming soon</div>
             </div>
           </div>
-
-        /* ── Chat ── */
         ) : (
           <>
-            {/* Messages */}
             <div style={{ flex:1, overflowY:'auto', padding:'20px' }}>
               {messages.length === 0 && (
                 <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100%', gap:16, textAlign:'center' }}>
@@ -239,8 +230,6 @@ export default function Dashboard() {
                   <div style={{ display:'flex', flexDirection:'column', gap:6, maxWidth:'75%', alignItems:m.role==='user'?'flex-end':'flex-start' }}>
                     <div style={{ padding:'12px 16px', borderRadius:12, background:m.role==='user'?'linear-gradient(135deg,rgba(0,198,255,0.15),rgba(138,43,226,0.15))':'rgba(255,255,255,0.05)', border:'1px solid', borderColor:m.role==='user'?'rgba(0,198,255,0.2)':'rgba(255,255,255,0.07)', fontSize:14, lineHeight:1.6 }}
                       dangerouslySetInnerHTML={{ __html: formatText(m.content) }} />
-
-                    {/* 🔊 Speaker button — AI messages only */}
                     {m.role === 'ai' && (
                       <button onClick={() => speak(m.content, i)}
                         style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 10px', borderRadius:20, background:speaking===i?'rgba(0,198,255,0.15)':'rgba(255,255,255,0.05)', border:speaking===i?'1px solid rgba(0,198,255,0.4)':'1px solid rgba(255,255,255,0.1)', color:speaking===i?'#00c6ff':'rgba(255,255,255,0.4)', cursor:'pointer', fontSize:11, transition:'all 0.2s' }}>
@@ -251,18 +240,16 @@ export default function Dashboard() {
                 </div>
               ))}
 
+              {/* ✅ COGNORYX HEARTBEAT — replaces old dots */}
               {loading && (
                 <div style={{ display:'flex', gap:10, marginBottom:16 }}>
-                  <div style={{ width:30, height:30, borderRadius:'50%', background:'rgba(255,255,255,0.1)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12 }}>CX</div>
-                  <div style={{ padding:'12px 16px', borderRadius:12, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.07)', display:'flex', gap:5, alignItems:'center' }}>
-                    {[0,1,2].map(j => <div key={j} style={{ width:7, height:7, borderRadius:'50%', background:'#00c6ff', animation:`bounce 1s ease-in-out ${j*0.15}s infinite` }} />)}
-                  </div>
+                  <CognoryxThinking />
                 </div>
               )}
+
               <div ref={bottomRef} />
             </div>
 
-            {/* 📎 Attachment preview */}
             {attachment && (
               <div style={{ margin:'0 20px 8px', padding:'8px 12px', borderRadius:10, background:'rgba(0,198,255,0.08)', border:'1px solid rgba(0,198,255,0.2)', display:'flex', alignItems:'center', gap:10, fontSize:13, color:'rgba(255,255,255,0.7)' }}>
                 <span style={{ fontSize:18 }}>{attachment.type.startsWith('image')?'🖼️':attachment.type.includes('pdf')?'📄':'📎'}</span>
@@ -271,19 +258,13 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* ── Input bar ── */}
             <div style={{ padding:'12px 20px 16px', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
               <input ref={fileRef} type="file" accept="image/*,.pdf,.txt,.doc,.docx,.csv,.json,.md" onChange={handleFile} style={{ display:'none' }} />
-
               <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderRadius:14, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.09)' }}>
-
-                {/* 📎 Attach */}
                 <button onClick={() => fileRef.current?.click()} title="Attach file"
                   style={{ width:34, height:34, borderRadius:'50%', background:attachment?'rgba(0,198,255,0.15)':'rgba(255,255,255,0.07)', border:attachment?'1px solid rgba(0,198,255,0.4)':'1px solid rgba(255,255,255,0.12)', cursor:'pointer', fontSize:17, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', color:attachment?'#00c6ff':'rgba(255,255,255,0.5)', transition:'all 0.2s' }}>
                   📎
                 </button>
-
-                {/* Text input */}
                 <textarea ref={inputRef} value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key==='Enter'&&!e.shiftKey) { e.preventDefault(); send(); } }}
@@ -292,16 +273,12 @@ export default function Dashboard() {
                   rows={1}
                   style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#e8e8f0', fontSize:14, resize:'none', lineHeight:1.5, fontFamily:'inherit' }}
                 />
-
-                {/* 📹 Live */}
                 <button onClick={() => setShowLive(true)} title="Live AI Call"
                   style={{ width:34, height:34, borderRadius:'50%', background:'rgba(138,43,226,0.15)', border:'1px solid rgba(138,43,226,0.35)', cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}
                   onMouseEnter={e => e.currentTarget.style.background='rgba(138,43,226,0.3)'}
                   onMouseLeave={e => e.currentTarget.style.background='rgba(138,43,226,0.15)'}>
                   📹
                 </button>
-
-                {/* Send */}
                 <button onClick={send} disabled={loading||(!input.trim()&&!attachment)}
                   style={{ width:34, height:34, borderRadius:'50%', background:(input.trim()||attachment)?'linear-gradient(135deg,#00c6ff,#8a2be2)':'rgba(255,255,255,0.08)', border:'none', cursor:(input.trim()||attachment)?'pointer':'default', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, transition:'background 0.2s' }}>
                   <svg viewBox="0 0 24 24" fill="white" width="15" height="15"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
@@ -314,7 +291,6 @@ export default function Dashboard() {
       </main>
 
       <style>{`
-        @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
         *{box-sizing:border-box}
         ::-webkit-scrollbar{width:4px}
         ::-webkit-scrollbar-track{background:transparent}
