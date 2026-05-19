@@ -22,6 +22,8 @@ export default function Dashboard() {
   const [attachment, setAttachment]       = useState(null);
   const [showNewChatPopup, setShowPopup]  = useState(false);
   const [savedMessages, setSaved]         = useState([]);
+  const [reactions, setReactions]         = useState({});
+  const [copied, setCopied]               = useState(null);
   const inputRef  = useRef(null);
   const bottomRef = useRef(null);
   const fileRef   = useRef(null);
@@ -54,6 +56,45 @@ export default function Dashboard() {
     }
   };
 
+  // ── Copy message ────────────────────────────────────────────
+  const copyMessage = (text, index) => {
+    const clean = text.replace(/<[^>]+>/g, '');
+    navigator.clipboard.writeText(clean);
+    setCopied(index);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  // ── React (like/dislike) ────────────────────────────────────
+  const react = (index, type) => {
+    setReactions(r => ({
+      ...r,
+      [index]: r[index] === type ? null : type,
+    }));
+  };
+
+  // ── Retry last message ──────────────────────────────────────
+  const retry = async (index) => {
+    // Find the user message before this AI message
+    const userMsg = messages[index - 1];
+    if (!userMsg || userMsg.role !== 'user') return;
+
+    // Remove the AI message and resend
+    setMessages(m => m.slice(0, index));
+    setLoading(true);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userMsg.content, uid: user?.uid }),
+      });
+      const data = await res.json();
+      setMessages(m => [...m, { role: 'ai', content: data.reply || '⚠️ No response' }]);
+    } catch {
+      setMessages(m => [...m, { role: 'ai', content: '⚠️ Something went wrong.' }]);
+    } finally { setLoading(false); }
+  };
+
+  // ── Text to Speech ──────────────────────────────────────────
   const speak = (text, index) => {
     window.speechSynthesis.cancel();
     if (speaking === index) { setSpeaking(null); return; }
@@ -136,6 +177,17 @@ export default function Dashboard() {
 
   const RECENT = ['Getting started', 'Image generation tips'];
 
+  // ── Action button style ─────────────────────────────────────
+  const actionBtn = (active, color) => ({
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    gap: 4, padding: '4px 9px', borderRadius: 20,
+    background: active ? `${color}18` : 'rgba(255,255,255,0.04)',
+    border: `0.5px solid ${active ? color : 'rgba(255,255,255,0.1)'}`,
+    color: active ? color : 'rgba(255,255,255,0.4)',
+    cursor: 'pointer', fontSize: 13, transition: 'all 0.15s',
+    fontFamily: 'inherit',
+  });
+
   return (
     <div style={{ display:'flex', height:'100vh', background:'#0f0f13', color:'#e8e8f0', fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', overflow:'hidden' }}>
 
@@ -143,22 +195,13 @@ export default function Dashboard() {
       {showNewChatPopup && (
         <NewChatPopup
           hasHistory={savedMessages.length > 0}
-          onNewChat={() => {
-            setMessages([]);
-            setAttachment(null);
-            setActive('chat');
-            setShowPopup(false);
-          }}
-          onContinue={() => {
-            setMessages(savedMessages);
-            setActive('chat');
-            setShowPopup(false);
-          }}
+          onNewChat={() => { setMessages([]); setAttachment(null); setActive('chat'); setShowPopup(false); }}
+          onContinue={() => { setMessages(savedMessages); setActive('chat'); setShowPopup(false); }}
           onCancel={() => setShowPopup(false)}
         />
       )}
 
-      {/* ── Live AI Overlay ── */}
+      {/* ── Live Overlay ── */}
       {showLive && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
           <div style={{ width:'100%', maxWidth:580, height:'88vh', background:'#0d0d16', borderRadius:20, border:'1px solid rgba(255,255,255,0.1)', display:'flex', flexDirection:'column', overflow:'hidden', position:'relative' }}>
@@ -170,7 +213,7 @@ export default function Dashboard() {
 
       {/* ── Sidebar ── */}
       <aside style={{ width:200, background:'#0d0d14', borderRight:'1px solid rgba(255,255,255,0.07)', display:'flex', flexDirection:'column', flexShrink:0, padding:'12px 0' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'4px 14px 12px' }}>
+        <div style={{ display:'flex', alignItems:'center', padding:'4px 14px 12px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <div style={{ width:28, height:28, borderRadius:6, background:'linear-gradient(135deg,#00c6ff,#8a2be2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:'#fff' }}>CX</div>
             <span style={{ fontWeight:600, fontSize:15, letterSpacing:'0.5px' }}>COGNORYX</span>
@@ -224,9 +267,7 @@ export default function Dashboard() {
         </div>
 
         {activeTool === 'image' ? (
-          <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column' }}>
-            <ImageTool />
-          </div>
+          <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column' }}><ImageTool /></div>
         ) : activeTool !== 'chat' ? (
           <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', color:'rgba(255,255,255,0.3)' }}>
             <div style={{ textAlign:'center' }}>
@@ -257,18 +298,60 @@ export default function Dashboard() {
               )}
 
               {messages.map((m, i) => (
-                <div key={i} style={{ display:'flex', gap:10, marginBottom:16, flexDirection:m.role==='user'?'row-reverse':'row' }}>
+                <div key={i} style={{ display:'flex', gap:10, marginBottom:20, flexDirection:m.role==='user'?'row-reverse':'row' }}>
                   <div style={{ width:30, height:30, borderRadius:'50%', background:m.role==='user'?'linear-gradient(135deg,#00c6ff,#8a2be2)':'rgba(255,255,255,0.1)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:600, flexShrink:0 }}>
                     {m.role==='user'?(user.email?.[0]?.toUpperCase()||'U'):'CX'}
                   </div>
+
                   <div style={{ display:'flex', flexDirection:'column', gap:6, maxWidth:'75%', alignItems:m.role==='user'?'flex-end':'flex-start' }}>
+                    {/* Message bubble */}
                     <div style={{ padding:'12px 16px', borderRadius:12, background:m.role==='user'?'linear-gradient(135deg,rgba(0,198,255,0.15),rgba(138,43,226,0.15))':'rgba(255,255,255,0.05)', border:'1px solid', borderColor:m.role==='user'?'rgba(0,198,255,0.2)':'rgba(255,255,255,0.07)', fontSize:14, lineHeight:1.6 }}
                       dangerouslySetInnerHTML={{ __html: formatText(m.content) }} />
+
+                    {/* ✅ ACTION BUTTONS — AI messages only */}
                     {m.role === 'ai' && (
-                      <button onClick={() => speak(m.content, i)}
-                        style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 10px', borderRadius:20, background:speaking===i?'rgba(0,198,255,0.15)':'rgba(255,255,255,0.05)', border:speaking===i?'1px solid rgba(0,198,255,0.4)':'1px solid rgba(255,255,255,0.1)', color:speaking===i?'#00c6ff':'rgba(255,255,255,0.4)', cursor:'pointer', fontSize:11, transition:'all 0.2s' }}>
-                        {speaking===i ? '⏹ Stop' : '🔊 Listen'}
-                      </button>
+                      <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:2 }}>
+
+                        {/* 🔄 Retry */}
+                        <button onClick={() => retry(i)} style={actionBtn(false, '#00c6ff')}
+                          title="Retry" onMouseEnter={e => e.currentTarget.style.background='rgba(0,198,255,0.1)'}
+                          onMouseLeave={e => e.currentTarget.style.background='rgba(255,255,255,0.04)'}>
+                          🔄 <span style={{ fontSize:11 }}>Retry</span>
+                        </button>
+
+                        {/* 👍 Like */}
+                        <button onClick={() => react(i, 'like')} style={actionBtn(reactions[i]==='like', '#56d364')}
+                          title="Good response"
+                          onMouseEnter={e => e.currentTarget.style.background='rgba(86,211,100,0.1)'}
+                          onMouseLeave={e => e.currentTarget.style.background=reactions[i]==='like'?'rgba(86,211,100,0.1)':'rgba(255,255,255,0.04)'}>
+                          👍
+                        </button>
+
+                        {/* 👎 Dislike */}
+                        <button onClick={() => react(i, 'dislike')} style={actionBtn(reactions[i]==='dislike', '#f85149')}
+                          title="Bad response"
+                          onMouseEnter={e => e.currentTarget.style.background='rgba(248,81,73,0.1)'}
+                          onMouseLeave={e => e.currentTarget.style.background=reactions[i]==='dislike'?'rgba(248,81,73,0.1)':'rgba(255,255,255,0.04)'}>
+                          👎
+                        </button>
+
+                        {/* 📋 Copy */}
+                        <button onClick={() => copyMessage(m.content, i)} style={actionBtn(copied===i, '#8a2be2')}
+                          title="Copy message"
+                          onMouseEnter={e => e.currentTarget.style.background='rgba(138,43,226,0.1)'}
+                          onMouseLeave={e => e.currentTarget.style.background=copied===i?'rgba(138,43,226,0.1)':'rgba(255,255,255,0.04)'}>
+                          {copied === i ? '✅' : '📋'} <span style={{ fontSize:11 }}>{copied===i?'Copied!':'Copy'}</span>
+                        </button>
+
+                        {/* 🔊 Listen */}
+                        <button onClick={() => speak(m.content, i)} style={actionBtn(speaking===i, '#00c6ff')}
+                          title="Listen"
+                          onMouseEnter={e => e.currentTarget.style.background='rgba(0,198,255,0.1)'}
+                          onMouseLeave={e => e.currentTarget.style.background=speaking===i?'rgba(0,198,255,0.1)':'rgba(255,255,255,0.04)'}>
+                          {speaking===i ? '⏹' : '🔊'} <span style={{ fontSize:11 }}>{speaking===i?'Stop':'Listen'}</span>
+                        </button>
+
+                      </div>
                     )}
                   </div>
                 </div>
