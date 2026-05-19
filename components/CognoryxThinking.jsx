@@ -11,9 +11,8 @@ export default function CognoryxThinking() {
     const ctx = cv.getContext("2d");
     const W = cv.width, H = cv.height;
     const CX = W / 2, CY = H / 2;
-    const sp = 18; // node spacing (small logo)
+    const sp = 18;
 
-    // 3x3 grid nodes
     const nodes = [];
     for (let r = 0; r < 3; r++)
       for (let c = 0; c < 3; c++)
@@ -36,21 +35,17 @@ export default function CognoryxThinking() {
     function loop(ts) {
       if (!t0) t0 = ts;
       const el = (ts - t0) / 1000;
-
       ctx.clearRect(0, 0, W, H);
 
-      // Heartbeat pulse — fast beat pattern
       const beat = heartbeat(el);
       const scale = 1 + beat * 0.35;
       const glowAmt = 0.4 + beat * 0.6;
-      const pulse = Math.sin(el * 3) * 0.5 + 0.5;
 
       ctx.save();
       ctx.translate(CX, CY);
       ctx.scale(scale, scale);
       ctx.translate(-CX, -CY);
 
-      // Draw edges
       edges.forEach(([a, b]) => {
         const na = nodes[a], nb = nodes[b];
         const g = ctx.createLinearGradient(na.x, na.y, nb.x, nb.y);
@@ -65,12 +60,9 @@ export default function CognoryxThinking() {
         ctx.stroke();
       });
 
-      // Draw nodes
       nodes.forEach((n) => {
         const r = n.isCenter ? 3.5 : 2.5;
         const col = n.isCenter ? "rgba(196,181,253,1)" : "rgba(96,165,250,1)";
-
-        // Glow
         if (glowAmt > 0) {
           ctx.beginPath();
           ctx.arc(n.x, n.y, r + 4 * glowAmt, 0, Math.PI * 2);
@@ -79,13 +71,11 @@ export default function CognoryxThinking() {
             : `rgba(79,142,247,${0.15 * glowAmt})`;
           ctx.fill();
         }
-
         ctx.beginPath();
         ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
         ctx.strokeStyle = col;
         ctx.lineWidth = 1;
         ctx.stroke();
-
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.isCenter ? 1.8 : 1, 0, Math.PI * 2);
         ctx.fillStyle = n.isCenter ? "#e9d5ff" : col;
@@ -93,7 +83,6 @@ export default function CognoryxThinking() {
       });
 
       ctx.restore();
-
       animRef.current = requestAnimationFrame(loop);
     }
 
@@ -105,43 +94,26 @@ export default function CognoryxThinking() {
     <div style={{
       display: "flex",
       alignItems: "center",
-      gap: 10,
-      padding: "10px 14px",
+      gap: 8,
+      padding: "8px 14px",
       background: "rgba(255,255,255,0.04)",
       border: "0.5px solid rgba(79,142,247,0.2)",
       borderRadius: "18px 18px 18px 4px",
       width: "fit-content",
-      maxWidth: 160,
     }}>
       <canvas ref={cvRef} width={52} height={52} style={{ display: "block" }} />
-      <div style={{
-        display: "flex", gap: 4, alignItems: "center"
-      }}>
-        {[0, 1, 2].map((i) => (
-          <div key={i} style={{
-            width: 5, height: 5,
-            borderRadius: "50%",
-            background: "linear-gradient(135deg,#4f8ef7,#a78bfa)",
-            animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
-          }} />
-        ))}
-      </div>
-      <style>{`
-        @keyframes bounce {
-          0%, 100% { transform: translateY(0); opacity: 0.4; }
-          50% { transform: translateY(-5px); opacity: 1; }
-        }
-      `}</style>
+      <span style={{ color: "#6b8fa8", fontSize: 13, fontFamily: "sans-serif" }}>
+        Thinking...
+      </span>
     </div>
   );
 }
 
-// Heartbeat curve — mimics ECG pulse
 function heartbeat(t) {
-  const cycle = t % 1.2; // beat every 1.2s
-  if (cycle < 0.1) return cycle / 0.1;           // rise
-  if (cycle < 0.2) return 1 - (cycle - 0.1) / 0.1; // fall
-  if (cycle < 0.3) return (cycle - 0.2) / 0.1 * 0.6; // small bump
-  if (cycle < 0.4) return 0.6 - (cycle - 0.3) / 0.1 * 0.6; // fall to 0
-  return 0; // flat line (rest)
+  const cycle = t % 1.2;
+  if (cycle < 0.1) return cycle / 0.1;
+  if (cycle < 0.2) return 1 - (cycle - 0.1) / 0.1;
+  if (cycle < 0.3) return (cycle - 0.2) / 0.1 * 0.6;
+  if (cycle < 0.4) return 0.6 - (cycle - 0.3) / 0.1 * 0.6;
+  return 0;
 }
