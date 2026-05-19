@@ -5,7 +5,6 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import dynamic from 'next/dynamic';
 import CognoryxThinking from '@/components/CognoryxThinking';
-// STEP 1 — Added import for the popup
 import NewChatPopup from '@/components/NewChatPopup';
 
 const LiveTool  = dynamic(() => import('@/components/LiveTool'),  { ssr: false });
@@ -13,19 +12,16 @@ const ImageTool = dynamic(() => import('@/components/ImageTool'), { ssr: false }
 
 export default function Dashboard() {
   const router = useRouter();
-  const [user, setUser]             = useState(null);
-  const [activeTool, setActive]     = useState('chat');
-  const [input, setInput]           = useState('');
-  const [messages, setMessages]     = useState([]);
-  const [loading, setLoading]       = useState(false);
-  const [showLive, setShowLive]     = useState(false);
-  const [speaking, setSpeaking]     = useState(null);
-  const [attachment, setAttachment] = useState(null);
-  
-  // STEP 2 — Added state for popup and chat history
-  const [showNewChatPopup, setShowNewChatPopup] = useState(false);
-  const [savedMessages, setSavedMessages] = useState([]);
-
+  const [user, setUser]                   = useState(null);
+  const [activeTool, setActive]           = useState('chat');
+  const [input, setInput]                 = useState('');
+  const [messages, setMessages]           = useState([]);
+  const [loading, setLoading]             = useState(false);
+  const [showLive, setShowLive]           = useState(false);
+  const [speaking, setSpeaking]           = useState(null);
+  const [attachment, setAttachment]       = useState(null);
+  const [showNewChatPopup, setShowPopup]  = useState(false);
+  const [savedMessages, setSaved]         = useState([]);
   const inputRef  = useRef(null);
   const bottomRef = useRef(null);
   const fileRef   = useRef(null);
@@ -45,6 +41,17 @@ export default function Dashboard() {
   const handleSignOut = async () => {
     await signOut(auth);
     router.push('/login');
+  };
+
+  const handleNewChat = () => {
+    if (messages.length > 0) {
+      setSaved(messages);
+      setShowPopup(true);
+    } else {
+      setActive('chat');
+      setMessages([]);
+      setAttachment(null);
+    }
   };
 
   const speak = (text, index) => {
@@ -132,6 +139,26 @@ export default function Dashboard() {
   return (
     <div style={{ display:'flex', height:'100vh', background:'#0f0f13', color:'#e8e8f0', fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', overflow:'hidden' }}>
 
+      {/* ── New Chat Popup ── */}
+      {showNewChatPopup && (
+        <NewChatPopup
+          hasHistory={savedMessages.length > 0}
+          onNewChat={() => {
+            setMessages([]);
+            setAttachment(null);
+            setActive('chat');
+            setShowPopup(false);
+          }}
+          onContinue={() => {
+            setMessages(savedMessages);
+            setActive('chat');
+            setShowPopup(false);
+          }}
+          onCancel={() => setShowPopup(false)}
+        />
+      )}
+
+      {/* ── Live AI Overlay ── */}
       {showLive && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
           <div style={{ width:'100%', maxWidth:580, height:'88vh', background:'#0d0d16', borderRadius:20, border:'1px solid rgba(255,255,255,0.1)', display:'flex', flexDirection:'column', overflow:'hidden', position:'relative' }}>
@@ -141,26 +168,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* STEP 4 — New Chat Popup overlay */}
-      {showNewChatPopup && (
-        <NewChatPopup
-          hasHistory={savedMessages.length > 0}
-          onNewChat={() => {
-            setMessages([]);        // fresh start
-            setAttachment(null);
-            setActive('chat');
-            setShowNewChatPopup(false);
-          }}
-          onContinue={() => {
-            setMessages(savedMessages); // restore old chat
-            setActive('chat');
-            setShowNewChatPopup(false);
-          }}
-          onCancel={() => setShowNewChatPopup(false)}
-        />
-      )}
-
-      {/* Sidebar */}
+      {/* ── Sidebar ── */}
       <aside style={{ width:200, background:'#0d0d14', borderRight:'1px solid rgba(255,255,255,0.07)', display:'flex', flexDirection:'column', flexShrink:0, padding:'12px 0' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'4px 14px 12px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -170,17 +178,7 @@ export default function Dashboard() {
         </div>
 
         <div style={{ padding:'0 10px 8px' }}>
-          {/* STEP 3 — Updated New Chat button logic */}
-          <button onClick={() => {
-            if (messages.length > 0) {
-              setSavedMessages(messages); // save current chat
-              setShowNewChatPopup(true);  // show popup
-            } else {
-              setActive('chat');
-              setMessages([]);
-              setAttachment(null);
-            }
-          }}
+          <button onClick={handleNewChat}
             style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'9px 12px', borderRadius:8, background:activeTool==='chat'?'rgba(255,255,255,0.08)':'transparent', border:'none', color:'#e8e8f0', cursor:'pointer', fontSize:13 }}>
             <span>✏️</span> New Chat
           </button>
@@ -219,7 +217,7 @@ export default function Dashboard() {
         </div>
       </aside>
 
-      {/* Main */}
+      {/* ── Main ── */}
       <main style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
         <div style={{ padding:'14px 20px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontSize:14, color:'rgba(255,255,255,0.7)' }}>
           {activeTool==='chat' ? 'New Chat' : TOOLS.find(t=>t.id===activeTool)?.label || 'New Chat'}
@@ -281,7 +279,6 @@ export default function Dashboard() {
                   <CognoryxThinking />
                 </div>
               )}
-
               <div ref={bottomRef} />
             </div>
 
