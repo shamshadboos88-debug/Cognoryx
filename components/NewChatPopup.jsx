@@ -18,12 +18,11 @@ export default function NewChatPopup({ onNewChat, onContinue, onCancel, hasHisto
       }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 8,
-            background: "linear-gradient(135deg,#00c6ff,#8a2be2)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 12, fontWeight: 700, color: "#fff", flexShrink: 0,
-          }}>CX</div>
+          <img
+            src="/cognoryx-logo.svg"
+            alt="COGNORYX"
+            style={{ width: 36, height: 36, objectFit:"contain", flexShrink: 0 }}
+          />
           <div>
             <div style={{ color: "#e8e8f0", fontSize: 15, fontWeight: 600 }}>Start a new chat</div>
             <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, marginTop: 2 }}>How would you like to begin?</div>

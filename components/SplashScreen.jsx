@@ -136,15 +136,15 @@ export default function SplashScreen({ onDone }) {
         transform: showBrand ? "translateY(0)" : "translateY(14px)",
         transition: "opacity 1s ease, transform 1s ease",
       }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10, justifyContent:"center" }}>
-          <div style={{
-            background: "linear-gradient(135deg,#4f8ef7,#a78bfa)",
-            borderRadius: 8, padding: "4px 12px",
-            color: "#fff", fontSize: 20, fontWeight: 700, letterSpacing: 2,
-          }}>CX</div>
-          <div style={{ color:"#fff", fontSize:22, fontWeight:700, letterSpacing:6 }}>
-            COGNORYX
-          </div>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <img
+            src="/cognoryx-logo.svg"
+            alt="COGNORYX"
+            style={{ height: 72, width: 72, objectFit:"contain" }}
+          />
+        </div>
+        <div style={{ color:"#fff", fontSize:22, fontWeight:700, letterSpacing:6, marginTop:8, textAlign:"center" }}>
+          COGNORYX
         </div>
         <div style={{ color:"#6b8fa8", fontSize:11, letterSpacing:3, marginTop:6 }}>
           THINK DEEPER · CREATE SMARTER

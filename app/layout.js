@@ -29,10 +29,14 @@ export const metadata = {
   },
   icons: {
     icon: [
+      { url: '/favicon.png',            sizes: '32x32',   type: 'image/png' },
       { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
       { url: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' },
     ],
-    apple: [{ url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' }],
+    apple: [
+      { url: '/apple-touch-icon.png',   sizes: '180x180', type: 'image/png' },
+      { url: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' },
+    ],
   },
 };
 
@@ -62,7 +66,9 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="COGNORYX" />
-        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+        {/* ✅ Updated to new COGNORYX logo */}
+        <link rel="icon" href="/favicon.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512x512.png" />
         <meta name="msapplication-TileImage" content="/icons/icon-512x512.png" />
         <meta name="msapplication-TileColor" content="#00c6ff" />

@@ -216,7 +216,9 @@ export default function ChatTool({
                   m.role === "user" ? styles.avatarUser : styles.avatarAi
                 }`}
               >
-                {m.role === "user" ? "U" : "CX"}
+                {m.role === "user" ? "U" : (
+                  <img src="/cognoryx-logo.svg" alt="COGNORYX" style={{ width:28, height:28, objectFit:"contain" }} />
+                )}
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 4, maxWidth: "75%" }}>
