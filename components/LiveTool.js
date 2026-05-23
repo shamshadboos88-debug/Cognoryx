@@ -1,13 +1,12 @@
 'use client';
 // components/LiveTool.js
-// Uses Web Speech API for mic + Gemini REST for responses + TTS for Aria voice
-// This works with ANY Gemini API key — no special Live API needed
+// Uses Web Speech API for mic + Gemini via /api/chat for responses + TTS for Aria voice
 
 import { useState, useRef, useEffect } from 'react';
 
 const SYSTEM_PROMPT = `You are Aria, the intelligent AI assistant for COGNORYX — a premium AI platform.
-You are warm, professional, and helpful. Speak in short natural sentences.
-Keep replies to 1-2 sentences for voice conversation.`;
+You are warm, friendly, and helpful. Speak in short natural sentences.
+Keep replies to 1-2 sentences maximum for smooth voice conversation.`;
 
 const S = {
   page: { display:'flex', flexDirection:'column', height:'100%', minHeight:'80vh', background:'transparent', color:'#e8e8f0', fontFamily:'inherit' },
@@ -45,14 +44,14 @@ if (typeof document !== 'undefined' && !document.getElementById('cx-kf')) {
 }
 
 export default function LiveTool() {
-  const [phase, setPhase]   = useState('idle');
-  const [isLive, setIsLive] = useState(false);
+  const [phase, setPhase]     = useState('idle');
+  const [isLive, setIsLive]   = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [lines, setLines]   = useState([]);
-  const [timer, setTimer]   = useState('00:00');
-  const [bars, setBars]     = useState(Array(12).fill(4));
-  const [error, setError]   = useState('');
-  const [history, setHistory] = useState([]);
+  const [lines, setLines]     = useState([]);
+  const [timer, setTimer]     = useState('00:00');
+  const [bars, setBars]       = useState(Array(12).fill(4));
+  const [error, setError]     = useState('');
+  const [chatHistory, setChatHistory] = useState([]);
 
   const recognRef  = useRef(null);
   const timerRef   = useRef(null);
@@ -60,16 +59,18 @@ export default function LiveTool() {
   const waveRef    = useRef(null);
   const speakRef   = useRef(false);
   const isLiveRef  = useRef(false);
+  const historyRef = useRef([]);
 
   useEffect(() => { isLiveRef.current = isLive; }, [isLive]);
+  useEffect(() => { historyRef.current = chatHistory; }, [chatHistory]);
 
   // ── Timer ──────────────────────────────────────────
   const startTimer = () => {
     secsRef.current = 0;
     timerRef.current = setInterval(() => {
       secsRef.current++;
-      const m = String(Math.floor(secsRef.current/60)).padStart(2,'0');
-      const s = String(secsRef.current%60).padStart(2,'0');
+      const m = String(Math.floor(secsRef.current / 60)).padStart(2, '0');
+      const s = String(secsRef.current % 60).padStart(2, '0');
       setTimer(`${m}:${s}`);
     }, 1000);
   };
@@ -78,12 +79,12 @@ export default function LiveTool() {
   // ── Waveform ───────────────────────────────────────
   const startWave = () => {
     waveRef.current = setInterval(() => {
-      setBars(Array(12).fill(0).map(() => 4 + Math.floor(Math.random()*26)));
+      setBars(Array(12).fill(0).map(() => 4 + Math.floor(Math.random() * 26)));
     }, 110);
   };
   const stopWave = () => { clearInterval(waveRef.current); setBars(Array(12).fill(4)); };
 
-  // ── Speak with best female voice ───────────────────
+  // ── Speak ──────────────────────────────────────────
   const speak = (text, onDone) => {
     window.speechSynthesis.cancel();
     const utt = new SpeechSynthesisUtterance(text);
@@ -104,10 +105,7 @@ export default function LiveTool() {
     setPhase('speaking');
     utt.onend = () => {
       speakRef.current = false;
-      if (isLiveRef.current) {
-        setPhase('listening');
-        startListening();
-      }
+      if (isLiveRef.current) { setPhase('listening'); startListening(); }
       onDone?.();
     };
     utt.onerror = () => {
@@ -117,59 +115,93 @@ export default function LiveTool() {
     window.speechSynthesis.speak(utt);
   };
 
-  // ── Ask Gemini via REST ────────────────────────────
-  const askGemini = async (userText) => {
+  // ── Ask Aria via /api/chat (safe — key stays on server) ──
+  const askAria = async (userText) => {
     setPhase('thinking');
-    const newHistory = [...history, { role:'user', parts:[{ text: userText }] }];
+
+    // Build messages array with history for context
+    const messages = [
+      ...historyRef.current,
+      { role: 'user', content: userText }
+    ];
 
     try {
-      const key = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-            contents: newHistory,
-            generationConfig: { temperature: 0.8, maxOutputTokens: 150 },
-          }),
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages,
+          mode: 'chat',
+          systemPrompt: SYSTEM_PROMPT,
+          stream: false, // no streaming for voice
+        }),
+      });
+
+      let reply = '';
+
+      // Handle streaming response (read full text)
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n').filter(l => l.startsWith('data: '));
+        for (const line of lines) {
+          const data = line.replace('data: ', '').trim();
+          if (data === '[DONE]') break;
+          try {
+            const parsed = JSON.parse(data);
+            reply += parsed.text || parsed.content || parsed.delta || '';
+          } catch {}
         }
-      );
+      }
 
-      const data = await res.json();
-      if (data.error) throw new Error(data.error.message);
+      // Fallback if streaming parse failed
+      if (!reply) {
+        const data = await res.json().catch(() => ({}));
+        reply = data.message || data.text || data.content || "I'm here to help!";
+      }
 
-      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'I am here to help you.';
-      const updatedHistory = [...newHistory, { role:'model', parts:[{ text: reply }] }];
-      setHistory(updatedHistory);
+      reply = reply.trim() || "I'm here to help!";
+
+      // Save to history
+      const updatedHistory = [
+        ...historyRef.current,
+        { role: 'user', content: userText },
+        { role: 'assistant', content: reply },
+      ];
+      // Keep only last 10 messages for context
+      const trimmed = updatedHistory.slice(-10);
+      setChatHistory(trimmed);
+
       addLine('ai', reply);
       speak(reply);
 
     } catch (err) {
-      console.error('[Gemini error]', err);
-      const fallback = 'I had trouble connecting. Please check your API key.';
+      console.error('[Aria error]', err);
+      const fallback = "Sorry, I had a connection issue. Please try again.";
       addLine('ai', fallback);
       speak(fallback);
       setError('⚠️ ' + err.message);
     }
   };
 
-  // ── Speech recognition ─────────────────────────────
+  // ── Speech Recognition ─────────────────────────────
   const startListening = () => {
     if (!isLiveRef.current || speakRef.current) return;
 
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-      setError('❌ Speech recognition not supported in this browser. Use Chrome.');
+      setError('❌ Speech recognition not supported. Please use Chrome browser.');
       return;
     }
 
     const r = new SR();
     recognRef.current = r;
-    r.continuous      = false;
-    r.interimResults  = false;
-    r.lang            = 'en-US';
+    r.continuous     = false;
+    r.interimResults = false;
+    r.lang           = 'en-US';
 
     setPhase('listening');
 
@@ -177,7 +209,7 @@ export default function LiveTool() {
       const text = e.results[0]?.[0]?.transcript?.trim();
       if (text && isLiveRef.current) {
         addLine('user', text);
-        askGemini(text);
+        askAria(text);
       }
     };
 
@@ -185,7 +217,7 @@ export default function LiveTool() {
       if (e.error === 'no-speech' && isLiveRef.current) {
         setTimeout(() => startListening(), 500);
       } else if (e.error === 'not-allowed') {
-        setError('❌ Microphone permission denied. Allow mic in browser settings.');
+        setError('❌ Microphone permission denied. Please allow mic access in your browser.');
         endCall();
       }
     };
@@ -196,25 +228,23 @@ export default function LiveTool() {
       }
     };
 
-    try { r.start(); } catch(e) { console.log('[SR start error]', e); }
+    try { r.start(); } catch (e) { console.log('[SR error]', e); }
   };
 
-  // ── Start call ─────────────────────────────────────
+  // ── Start Call ─────────────────────────────────────
   const startCall = () => {
     setError('');
     setLines([]);
-    setHistory([]);
+    setChatHistory([]);
+    historyRef.current = [];
     setIsLive(true);
     isLiveRef.current = true;
     startTimer();
     startWave();
-    setPhase('speaking');
 
-    // Aria greeting
-    const greeting = "Hello! I'm Aria, your COGNORYX AI assistant. I'm listening — how can I help you today?";
+    const greeting = "Hello! I'm Aria, your COGNORYX AI assistant. How can I help you today?";
     addLine('ai', greeting);
 
-    // Wait for voices to load
     const trySpeak = () => {
       const voices = window.speechSynthesis.getVoices();
       if (voices.length > 0) {
@@ -226,7 +256,7 @@ export default function LiveTool() {
     trySpeak();
   };
 
-  // ── End call ───────────────────────────────────────
+  // ── End Call ───────────────────────────────────────
   const endCall = () => {
     window.speechSynthesis.cancel();
     recognRef.current?.stop();
@@ -263,7 +293,7 @@ export default function LiveTool() {
     listening: 'Listening — speak now...',
     thinking:  'Aria is thinking...',
     muted:     'Muted — tap mic to resume',
-    ended:     'Session ended',
+    ended:     'Session ended — tap to start again',
   };
 
   const emoji = phase === 'speaking' ? '🔊' : phase === 'listening' ? '🎤' : phase === 'thinking' ? '🧠' : '🤖';
@@ -301,16 +331,16 @@ export default function LiveTool() {
 
         {/* Waveform */}
         <div style={S.waveform}>
-          {bars.map((h,i) => <div key={i} style={S.bar(h)} />)}
+          {bars.map((h, i) => <div key={i} style={S.bar(h)} />)}
         </div>
 
         {/* Transcript */}
         <div style={S.transcript}>
           {lines.length === 0
             ? <span style={S.transcriptEmpty}>Your conversation will appear here...</span>
-            : lines.map((l,i) => (
-              <div key={i} style={l.role==='ai' ? S.aiLine : S.userLine}>
-                <span style={S.lineLabel}>{l.role==='ai'?'Aria':'You'}</span>{l.text}
+            : lines.map((l, i) => (
+              <div key={i} style={l.role === 'ai' ? S.aiLine : S.userLine}>
+                <span style={S.lineLabel}>{l.role === 'ai' ? 'Aria' : 'You'}</span>{l.text}
               </div>
             ))
           }
@@ -325,12 +355,13 @@ export default function LiveTool() {
         <button style={S.btnCall(isLive)} onClick={isLive ? endCall : startCall}>
           {isLive ? '📵  End session' : '📞  Start live call'}
         </button>
-        <button style={{ ...S.btn(false, '138,43,226'), maxWidth:60 }} onClick={() => { window.speechSynthesis.cancel(); if(isLive) { setPhase('listening'); startListening(); } }}>
+        <button style={{ ...S.btn(false, '138,43,226'), maxWidth:60 }}
+          onClick={() => { window.speechSynthesis.cancel(); if (isLive) { setPhase('listening'); startListening(); } }}>
           ⏭️
         </button>
       </div>
 
-      <div style={S.tip}>Uses Web Speech API + Gemini 1.5 Flash · Works on Chrome</div>
+      <div style={S.tip}>Uses Web Speech API · Works best on Chrome · Powered by COGNORYX AI</div>
     </div>
   );
 }
