@@ -1,8 +1,13 @@
+
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import {
+  collection, addDoc, getDocs, query,
+  orderBy, limit, doc, updateDoc, serverTimestamp
+} from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import dynamic from 'next/dynamic';
 import CognoryxThinking from '@/components/CognoryxThinking';
 import NewChatPopup from '@/components/NewChatPopup';
@@ -11,35 +16,71 @@ const LiveTool  = dynamic(() => import('@/components/LiveTool'),  { ssr: false }
 const ImageTool = dynamic(() => import('@/components/ImageTool'), { ssr: false });
 
 const MODES = [
-  { id: 'chat',  icon: '💬', label: 'Chat',       desc: 'General AI assistant' },
-  { id: 'code',  icon: '💻', label: 'Code',       desc: 'Expert coding agent' },
-  { id: 'agent', icon: '🤖', label: 'Agent',      desc: 'Multi-step task agent' },
-  { id: 'video', icon: '🎥', label: 'Video',      desc: 'Analyze videos & screens' },
+  { id: 'chat',  icon: '💬', label: 'Chat',  desc: 'General AI assistant' },
+  { id: 'code',  icon: '💻', label: 'Code',  desc: 'Expert coding agent' },
+  { id: 'agent', icon: '🤖', label: 'Agent', desc: 'Multi-step task agent' },
+  { id: 'video', icon: '🎥', label: 'Video', desc: 'Analyze videos & screens' },
 ];
+
+const TOOLS = [
+  { id: 'image',     label: 'Image Generator', icon: '🎨' },
+  { id: 'video',     label: 'Image → Video',   icon: '🎬' },
+  { id: 'animation', label: 'AI Animation',    icon: '✨' },
+  { id: 'talk',      label: 'Live Camera',     icon: '📹' },
+];
+
+const CHIPS = [
+  { icon: '💡', label: 'Explain quantum computing' },
+  { icon: '🐍', label: 'Write a Python function' },
+  { icon: '✏️', label: 'Give me startup ideas' },
+  { icon: '🖼️', label: 'Analyze an image' },
+];
+const AGENT_CHIPS = [
+  { icon: '🌐', label: 'Research a topic and write a report' },
+  { icon: '💻', label: 'Build a full landing page' },
+  { icon: '📊', label: 'Analyze data and create insights' },
+  { icon: '📧', label: 'Write and refine a marketing email' },
+];
+const CODE_CHIPS = [
+  { icon: '🐛', label: 'Debug this code' },
+  { icon: '⚡', label: 'Optimize my function' },
+  { icon: '🔄', label: 'Refactor this component' },
+  { icon: '📝', label: 'Explain this code' },
+];
+
+const modeColors = { chat: '#00c6ff', code: '#56d364', agent: '#f0883e', video: '#a78bfa' };
 
 export default function Dashboard() {
   const router = useRouter();
-  const [user, setUser]             = useState(null);
-  const [activeTool, setActive]     = useState('chat');
-  const [input, setInput]           = useState('');
-  const [messages, setMessages]     = useState([]);
-  const [loading, setLoading]       = useState(false);
-  const [showLive, setShowLive]     = useState(false);
-  const [speaking, setSpeaking]     = useState(null);
-  const [attachment, setAttachment] = useState(null);
-  const [showPopup, setShowPopup]   = useState(false);
-  const [savedMsgs, setSavedMsgs]   = useState([]);
-  const [reactions, setReactions]   = useState({});
-  const [copied, setCopied]         = useState(null);
-  const [mode, setMode]             = useState('chat');
-  const [streamEnabled]             = useState(true);
+  const [user, setUser]               = useState(null);
+  const [activeTool, setActive]       = useState('chat');
+  const [input, setInput]             = useState('');
+  const [messages, setMessages]       = useState([]);
+  const [loading, setLoading]         = useState(false);
+  const [showLive, setShowLive]       = useState(false);
+  const [speaking, setSpeaking]       = useState(null);
+  const [attachment, setAttachment]   = useState(null);
+  const [showPopup, setShowPopup]     = useState(false);
+  const [savedMsgs, setSavedMsgs]     = useState([]);
+  const [reactions, setReactions]     = useState({});
+  const [copied, setCopied]           = useState(null);
+  const [mode, setMode]               = useState('chat');
+  const [streamEnabled]               = useState(true);
+
+  // ── Chat history state ──────────────────────────────────
+  const [chatHistory, setChatHistory] = useState([]);   // [{id, title, createdAt}]
+  const [activeChatId, setActiveChatId] = useState(null); // current Firestore doc id
+  const [historyLoading, setHistoryLoading] = useState(false);
+
   const inputRef  = useRef(null);
   const bottomRef = useRef(null);
   const fileRef   = useRef(null);
 
+  // ── Auth ────────────────────────────────────────────────
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, u => {
-      if (!u) router.push('/login'); else setUser(u);
+      if (!u) router.push('/login');
+      else { setUser(u); loadChatHistory(u.uid); }
     });
     return unsub;
   }, [router]);
@@ -48,12 +89,89 @@ export default function Dashboard() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const handleSignOut = async () => { await signOut(auth); router.push('/login'); };
-
-  const handleNewChat = () => {
-    if (messages.length > 0) { setSavedMsgs(messages); setShowPopup(true); }
-    else { setMessages([]); setAttachment(null); setActive('chat'); }
+  // ── Load chat history from Firestore ────────────────────
+  const loadChatHistory = async (uid) => {
+    setHistoryLoading(true);
+    try {
+      const q = query(
+        collection(db, 'users', uid, 'chats'),
+        orderBy('updatedAt', 'desc'),
+        limit(20)
+      );
+      const snap = await getDocs(q);
+      const chats = snap.docs.map(d => ({
+        id: d.id,
+        title: d.data().title || 'Untitled chat',
+        createdAt: d.data().createdAt,
+        messages: d.data().messages || [],
+      }));
+      setChatHistory(chats);
+    } catch (err) {
+      console.error('[History] load failed:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
   };
+
+  // ── Save / update chat in Firestore ─────────────────────
+  const saveChatToFirestore = async (uid, msgs, existingId = null) => {
+    if (!msgs || msgs.length < 2) return existingId;
+    const firstUserMsg = msgs.find(m => m.role === 'user')?.content || 'New chat';
+    const title = firstUserMsg.replace(/<[^>]+>/g, '').slice(0, 50);
+    const payload = {
+      title,
+      messages: msgs.map(m => ({ role: m.role, content: m.content })),
+      updatedAt: serverTimestamp(),
+    };
+    try {
+      if (existingId) {
+        await updateDoc(doc(db, 'users', uid, 'chats', existingId), payload);
+        // Update local history title
+        setChatHistory(h => h.map(c => c.id === existingId ? { ...c, title } : c));
+        return existingId;
+      } else {
+        const ref = await addDoc(collection(db, 'users', uid, 'chats'), {
+          ...payload,
+          createdAt: serverTimestamp(),
+        });
+        // Prepend to local history
+        setChatHistory(h => [{ id: ref.id, title, messages: msgs }, ...h.slice(0, 19)]);
+        return ref.id;
+      }
+    } catch (err) {
+      console.error('[History] save failed:', err);
+      return existingId;
+    }
+  };
+
+  // ── Load a past chat ────────────────────────────────────
+  const loadChat = (chat) => {
+    setMessages(chat.messages || []);
+    setActiveChatId(chat.id);
+    setActive('chat');
+    setAttachment(null);
+  };
+
+  // ── New chat ────────────────────────────────────────────
+  const handleNewChat = () => {
+    if (messages.length > 0) {
+      setSavedMsgs(messages);
+      setShowPopup(true);
+    } else {
+      startFreshChat();
+    }
+  };
+
+  const startFreshChat = () => {
+    setMessages([]);
+    setAttachment(null);
+    setActive('chat');
+    setActiveChatId(null);
+    setShowPopup(false);
+  };
+
+  // ── Helpers ─────────────────────────────────────────────
+  const handleSignOut = async () => { await signOut(auth); router.push('/login'); };
 
   const copyMessage = (text, i) => {
     navigator.clipboard.writeText(text.replace(/<[^>]+>/g, ''));
@@ -94,14 +212,14 @@ export default function Dashboard() {
     e.target.value = '';
   };
 
-  // ── Core send with streaming support ──────────────────────
+  // ── Core send ────────────────────────────────────────────
   const sendMessage = async (text, att) => {
     setLoading(true);
+    let finalMsgs = [];
     try {
       const body = { message: text || 'Analyze this file', uid: user?.uid, mode, stream: streamEnabled };
       if (att) body.attachment = { base64: att.base64, type: att.type, name: att.name };
 
-      // STREAMING
       if (streamEnabled && !att) {
         const res = await fetch('/api/chat', {
           method: 'POST',
@@ -110,11 +228,11 @@ export default function Dashboard() {
         });
 
         if (res.headers.get('content-type')?.includes('text/event-stream')) {
-          // Add empty AI message to stream into
-          setMessages(m => [...m, { role: 'ai', content: '', streaming: true }]);
+          setMessages(m => { finalMsgs = [...m, { role: 'ai', content: '', streaming: true }]; return finalMsgs; });
           const reader = res.body.getReader();
           const decoder = new TextDecoder();
           let buffer = '';
+          let aiContent = '';
 
           while (true) {
             const { done, value } = await reader.read();
@@ -127,30 +245,39 @@ export default function Dashboard() {
                 try {
                   const data = JSON.parse(line.slice(6));
                   if (data.done) {
-                    setMessages(m => m.map((msg, i) => i === m.length - 1 ? { ...msg, streaming: false } : msg));
+                    setMessages(m => {
+                      finalMsgs = m.map((msg, i) => i === m.length - 1 ? { ...msg, streaming: false } : msg);
+                      return finalMsgs;
+                    });
                   } else if (data.text) {
-                    setMessages(m => m.map((msg, i) => i === m.length - 1 ? { ...msg, content: msg.content + data.text } : msg));
+                    aiContent += data.text;
+                    setMessages(m => {
+                      finalMsgs = m.map((msg, i) => i === m.length - 1 ? { ...msg, content: msg.content + data.text } : msg);
+                      return finalMsgs;
+                    });
                   }
                 } catch {}
               }
             }
           }
-          return;
+        } else {
+          const data = await res.json();
+          setMessages(m => { finalMsgs = [...m, { role: 'ai', content: data.reply || '⚠️ No response', provider: data.provider }]; return finalMsgs; });
         }
-
-        // Non-stream fallback
-        const data = await res.json();
-        setMessages(m => [...m, { role: 'ai', content: data.reply || '⚠️ No response', provider: data.provider }]);
-
       } else {
-        // Non-streaming (files/images/video)
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...body, stream: false }),
         });
         const data = await res.json();
-        setMessages(m => [...m, { role: 'ai', content: data.reply || '⚠️ No response', provider: data.provider }]);
+        setMessages(m => { finalMsgs = [...m, { role: 'ai', content: data.reply || '⚠️ No response', provider: data.provider }]; return finalMsgs; });
+      }
+
+      // ✅ Save to Firestore after AI replies
+      if (user && finalMsgs.length >= 2) {
+        const newId = await saveChatToFirestore(user.uid, finalMsgs, activeChatId);
+        if (!activeChatId) setActiveChatId(newId);
       }
 
     } catch {
@@ -183,37 +310,7 @@ export default function Dashboard() {
 
   if (!user) return null;
 
-  const TOOLS = [
-    { id:'image',     label:'Image Generator', icon:'🎨' },
-    { id:'video',     label:'Image → Video',   icon:'🎬' },
-    { id:'animation', label:'AI Animation',    icon:'✨' },
-    { id:'talk',      label:'Live Camera',     icon:'📹' },
-  ];
-
-  const CHIPS = [
-    { icon:'💡', label:'Explain quantum computing' },
-    { icon:'🐍', label:'Write a Python function' },
-    { icon:'✏️', label:'Give me startup ideas' },
-    { icon:'🖼️', label:'Analyze an image' },
-  ];
-
-  const AGENT_CHIPS = [
-    { icon:'🌐', label:'Research a topic and write a report' },
-    { icon:'💻', label:'Build a full landing page' },
-    { icon:'📊', label:'Analyze data and create insights' },
-    { icon:'📧', label:'Write and refine a marketing email' },
-  ];
-
-  const CODE_CHIPS = [
-    { icon:'🐛', label:'Debug this code' },
-    { icon:'⚡', label:'Optimize my function' },
-    { icon:'🔄', label:'Refactor this component' },
-    { icon:'📝', label:'Explain this code' },
-  ];
-
   const chips = mode === 'agent' ? AGENT_CHIPS : mode === 'code' ? CODE_CHIPS : CHIPS;
-
-  const modeColors = { chat: '#00c6ff', code: '#56d364', agent: '#f0883e', video: '#a78bfa' };
   const currentColor = modeColors[mode];
 
   const actionBtn = (active, color) => ({
@@ -240,7 +337,7 @@ export default function Dashboard() {
       {showPopup && (
         <NewChatPopup
           hasHistory={savedMsgs.length > 0}
-          onNewChat={() => { setMessages([]); setAttachment(null); setActive('chat'); setShowPopup(false); }}
+          onNewChat={startFreshChat}
           onContinue={() => { setMessages(savedMsgs); setActive('chat'); setShowPopup(false); }}
           onCancel={() => setShowPopup(false)}
         />
@@ -255,38 +352,67 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Sidebar */}
-      <aside style={{width:210,background:'#0d0d14',borderRight:'1px solid rgba(255,255,255,0.07)',display:'flex',flexDirection:'column',flexShrink:0,padding:'12px 0'}}>
+      {/* ── SIDEBAR ─────────────────────────────────────── */}
+      <aside style={{width:220,background:'#0d0d14',borderRight:'1px solid rgba(255,255,255,0.07)',display:'flex',flexDirection:'column',flexShrink:0,padding:'12px 0',overflow:'hidden'}}>
+
+        {/* Logo */}
         <div style={{display:'flex',alignItems:'center',gap:8,padding:'4px 14px 12px'}}>
-          <div style={{width:28,height:28,borderRadius:6,background:'linear-gradient(135deg,#00c6ff,#8a2be2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'#fff'}}>CX</div>
+          <img src="/cognoryx-logo.svg" alt="COGNORYX" style={{width:28,height:28,objectFit:'contain'}}/>
           <span style={{fontWeight:600,fontSize:15,letterSpacing:'0.5px'}}>COGNORYX</span>
         </div>
 
+        {/* New Chat button */}
         <div style={{padding:'0 10px 8px'}}>
-          <button onClick={handleNewChat} style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderRadius:8,background:activeTool==='chat'?'rgba(255,255,255,0.08)':'transparent',border:'none',color:'#e8e8f0',cursor:'pointer',fontSize:13}}>
+          <button onClick={handleNewChat} style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderRadius:8,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',color:'#e8e8f0',cursor:'pointer',fontSize:13,fontFamily:'inherit',transition:'all 0.2s'}}
+            onMouseEnter={e=>e.currentTarget.style.background='rgba(0,198,255,0.1)'}
+            onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.06)'}>
             <span>✏️</span> New Chat
           </button>
         </div>
 
+        {/* ✅ REAL CHAT HISTORY */}
         <div style={{padding:'4px 14px 6px',fontSize:10,fontWeight:600,color:'rgba(255,255,255,0.3)',letterSpacing:'1px'}}>RECENT</div>
-        {['Getting started','Image generation tips'].map(r => (
-          <button key={r} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',background:'transparent',border:'none',color:'rgba(255,255,255,0.5)',cursor:'pointer',fontSize:12,textAlign:'left',width:'100%'}}>
-            <span style={{fontSize:11}}>💬</span>
-            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r}</span>
-          </button>
-        ))}
 
-        <div style={{padding:'12px 14px 6px',fontSize:10,fontWeight:600,color:'rgba(255,255,255,0.3)',letterSpacing:'1px'}}>TOOLS</div>
+        <div style={{flex:1,overflowY:'auto',paddingBottom:8}}>
+          {historyLoading ? (
+            <div style={{padding:'10px 14px',fontSize:12,color:'rgba(255,255,255,0.3)'}}>Loading...</div>
+          ) : chatHistory.length === 0 ? (
+            <div style={{padding:'10px 14px',fontSize:12,color:'rgba(255,255,255,0.2)',fontStyle:'italic'}}>No chats yet</div>
+          ) : (
+            chatHistory.map(chat => (
+              <button key={chat.id} onClick={() => loadChat(chat)}
+                style={{
+                  display:'flex', alignItems:'center', gap:8,
+                  padding:'7px 14px',
+                  background: activeChatId === chat.id ? 'rgba(0,198,255,0.08)' : 'transparent',
+                  border:'none',
+                  borderLeft: activeChatId === chat.id ? '2px solid #00c6ff' : '2px solid transparent',
+                  color: activeChatId === chat.id ? '#e8e8f0' : 'rgba(255,255,255,0.5)',
+                  cursor:'pointer', fontSize:12, textAlign:'left', width:'100%',
+                  transition:'all 0.15s',
+                }}
+                onMouseEnter={e=>{ if(activeChatId!==chat.id) e.currentTarget.style.background='rgba(255,255,255,0.05)'; }}
+                onMouseLeave={e=>{ if(activeChatId!==chat.id) e.currentTarget.style.background='transparent'; }}
+                title={chat.title}
+              >
+                <span style={{fontSize:11,flexShrink:0}}>💬</span>
+                <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{chat.title}</span>
+              </button>
+            ))
+          )}
+        </div>
+
+        {/* Tools section */}
+        <div style={{padding:'4px 14px 6px',fontSize:10,fontWeight:600,color:'rgba(255,255,255,0.3)',letterSpacing:'1px'}}>TOOLS</div>
         {TOOLS.map(t => (
           <button key={t.id} onClick={() => t.id==='talk' ? setShowLive(true) : setActive(t.id)}
-            style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',background:activeTool===t.id?'rgba(255,255,255,0.07)':'transparent',border:'none',color:activeTool===t.id?'#e8e8f0':'rgba(255,255,255,0.55)',cursor:'pointer',fontSize:12,textAlign:'left',width:'100%',borderRadius:6,margin:'1px 0'}}>
+            style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',background:activeTool===t.id?'rgba(255,255,255,0.07)':'transparent',border:'none',color:activeTool===t.id?'#e8e8f0':'rgba(255,255,255,0.55)',cursor:'pointer',fontSize:12,textAlign:'left',width:'100%',borderRadius:6,margin:'1px 0',fontFamily:'inherit'}}>
             <span>{t.icon}</span><span>{t.label}</span>
           </button>
         ))}
 
-        <div style={{flex:1}}/>
-
-        <div style={{padding:'10px 14px 6px',borderTop:'1px solid rgba(255,255,255,0.06)'}}>
+        {/* User footer */}
+        <div style={{padding:'10px 14px 6px',borderTop:'1px solid rgba(255,255,255,0.06)',marginTop:8}}>
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
             <div style={{width:28,height:28,borderRadius:'50%',background:'linear-gradient(135deg,#00c6ff,#8a2be2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,color:'#fff',flexShrink:0}}>
               {user.displayName?.[0]?.toUpperCase()||user.email?.[0]?.toUpperCase()||'U'}
@@ -297,20 +423,17 @@ export default function Dashboard() {
             </div>
           </div>
           <button style={{width:'100%',padding:'8px',borderRadius:8,background:'linear-gradient(135deg,#00c6ff,#8a2be2)',border:'none',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',marginBottom:6}}>⚡ Upgrade to Pro</button>
-          <button onClick={handleSignOut} style={{width:'100%',padding:'6px',borderRadius:8,background:'transparent',border:'none',color:'rgba(255,255,255,0.35)',fontSize:11,cursor:'pointer'}}>Sign Out</button>
+          <button onClick={handleSignOut} style={{width:'100%',padding:'6px',borderRadius:8,background:'transparent',border:'none',color:'rgba(255,255,255,0.35)',fontSize:11,cursor:'pointer',fontFamily:'inherit'}}>Sign Out</button>
         </div>
       </aside>
 
-      {/* Main */}
+      {/* ── MAIN ────────────────────────────────────────── */}
       <main style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
 
-        {/* Top bar with mode selector */}
         <div style={{padding:'10px 20px',borderBottom:'1px solid rgba(255,255,255,0.06)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
           <div style={{fontSize:14,color:'rgba(255,255,255,0.7)'}}>
-            {activeTool==='chat' ? 'New Chat' : TOOLS.find(t=>t.id===activeTool)?.label||'New Chat'}
+            {activeTool==='chat' ? (activeChatId ? (chatHistory.find(c=>c.id===activeChatId)?.title||'Chat') : 'New Chat') : TOOLS.find(t=>t.id===activeTool)?.label||'New Chat'}
           </div>
-
-          {/* Mode selector - only show for chat */}
           {activeTool === 'chat' && (
             <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
               {MODES.map(m => (
@@ -322,7 +445,6 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Mode banner */}
         {activeTool === 'chat' && mode !== 'chat' && (
           <div style={{padding:'10px 20px',background:`${currentColor}08`,borderBottom:`1px solid ${currentColor}20`,display:'flex',alignItems:'center',gap:10}}>
             <span style={{fontSize:18}}>{MODES.find(m=>m.id===mode)?.icon}</span>
@@ -353,18 +475,18 @@ export default function Dashboard() {
                     {MODES.find(m=>m.id===mode)?.icon||'🧠'}
                   </div>
                   <h2 style={{fontSize:26,fontWeight:600,color:'#e8e8f0',margin:0}}>
-                    {mode==='agent' ? 'COGNORYX Agents' : mode==='code' ? 'Code Agent' : mode==='video' ? 'Video Analysis' : 'How can I help you?'}
+                    {mode==='agent'?'COGNORYX Agents':mode==='code'?'Code Agent':mode==='video'?'Video Analysis':'How can I help you?'}
                   </h2>
                   <p style={{fontSize:14,color:'rgba(255,255,255,0.4)',margin:0,maxWidth:460}}>
-                    {mode==='agent' ? 'Give me a complex task and I\'ll break it down and execute it step by step autonomously.' :
-                     mode==='code'  ? 'Paste your code, describe bugs, or ask me to write, refactor, or optimize anything.' :
-                     mode==='video' ? 'Attach a video or screen recording and I\'ll analyze what\'s happening in detail.' :
+                    {mode==='agent'?'Give me a complex task and I\'ll break it down and execute it step by step autonomously.':
+                     mode==='code' ?'Paste your code, describe bugs, or ask me to write, refactor, or optimize anything.':
+                     mode==='video'?'Attach a video or screen recording and I\'ll analyze what\'s happening in detail.':
                      'Ask anything, upload images or documents, or use the tools on the left.'}
                   </p>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:8,width:'100%',maxWidth:520}}>
                     {chips.map(c => (
                       <button key={c.label} onClick={() => { setInput(c.label); inputRef.current?.focus(); }}
-                        style={{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',borderRadius:12,background:'rgba(255,255,255,0.04)',border:`1px solid rgba(255,255,255,0.08)`,color:'rgba(255,255,255,0.7)',cursor:'pointer',fontSize:13,textAlign:'left',transition:'all 0.15s'}}
+                        style={{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',borderRadius:12,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',color:'rgba(255,255,255,0.7)',cursor:'pointer',fontSize:13,textAlign:'left',transition:'all 0.15s',fontFamily:'inherit'}}
                         onMouseEnter={e=>e.currentTarget.style.background=`${currentColor}10`}
                         onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'}>
                         <span style={{fontSize:18}}>{c.icon}</span><span>{c.label}</span>
@@ -376,51 +498,28 @@ export default function Dashboard() {
 
               {messages.map((m, i) => (
                 <div key={i} style={{display:'flex',gap:10,marginBottom:20,flexDirection:m.role==='user'?'row-reverse':'row'}}>
-                  <div style={{width:30,height:30,borderRadius:'50%',background:m.role==='user'?'linear-gradient(135deg,#00c6ff,#8a2be2)':'rgba(255,255,255,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,flexShrink:0}}>
-                    {m.role==='user'?(user.email?.[0]?.toUpperCase()||'U'):'CX'}
+                  <div style={{width:30,height:30,borderRadius:'50%',background:m.role==='user'?'linear-gradient(135deg,#00c6ff,#8a2be2)':'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,flexShrink:0,overflow:'hidden'}}>
+                    {m.role==='user'
+                      ? (user.email?.[0]?.toUpperCase()||'U')
+                      : <img src="/cognoryx-logo.svg" alt="CX" style={{width:22,height:22,objectFit:'contain'}}/>
+                    }
                   </div>
                   <div style={{display:'flex',flexDirection:'column',gap:6,maxWidth:'78%',alignItems:m.role==='user'?'flex-end':'flex-start'}}>
                     <div style={{padding:'12px 16px',borderRadius:12,background:m.role==='user'?'linear-gradient(135deg,rgba(0,198,255,0.15),rgba(138,43,226,0.15))':'rgba(255,255,255,0.05)',border:'1px solid',borderColor:m.role==='user'?'rgba(0,198,255,0.2)':'rgba(255,255,255,0.07)',fontSize:14,lineHeight:1.7}}
                       dangerouslySetInnerHTML={{__html:formatText(m.content)}}/>
-
-                    {/* Streaming indicator */}
                     {m.streaming && (
                       <div style={{width:8,height:8,borderRadius:'50%',background:currentColor,animation:'blink 0.8s ease-in-out infinite',marginTop:-4}}/>
                     )}
-
-                    {/* Provider badge */}
                     {m.role==='ai' && m.provider && !m.streaming && (
                       <div style={{fontSize:10,color:'rgba(255,255,255,0.2)',letterSpacing:'0.5px'}}>via {m.provider}</div>
                     )}
-
-                    {/* Action buttons */}
                     {m.role==='ai' && !m.streaming && (
                       <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:2}}>
-                        <button onClick={() => retry(i)} style={actionBtn(false,'#00c6ff')}
-                          onMouseEnter={e=>e.currentTarget.style.background='rgba(0,198,255,0.1)'}
-                          onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'}>
-                          🔄 <span style={{fontSize:11}}>Retry</span>
-                        </button>
-                        <button onClick={() => react(i,'like')} style={actionBtn(reactions[i]==='like','#56d364')}
-                          onMouseEnter={e=>e.currentTarget.style.background='rgba(86,211,100,0.1)'}
-                          onMouseLeave={e=>e.currentTarget.style.background=reactions[i]==='like'?'rgba(86,211,100,0.1)':'rgba(255,255,255,0.04)'}>
-                          👍
-                        </button>
-                        <button onClick={() => react(i,'dislike')} style={actionBtn(reactions[i]==='dislike','#f85149')}
-                          onMouseEnter={e=>e.currentTarget.style.background='rgba(248,81,73,0.1)'}
-                          onMouseLeave={e=>e.currentTarget.style.background=reactions[i]==='dislike'?'rgba(248,81,73,0.1)':'rgba(255,255,255,0.04)'}>
-                          👎
-                        </button>
-                        <button onClick={() => copyMessage(m.content,i)} style={actionBtn(copied===i,'#8a2be2')}
-                          onMouseEnter={e=>e.currentTarget.style.background='rgba(138,43,226,0.1)'}
-                          onMouseLeave={e=>e.currentTarget.style.background=copied===i?'rgba(138,43,226,0.1)':'rgba(255,255,255,0.04)'}>
-                          {copied===i?'✅':'📋'} <span style={{fontSize:11}}>{copied===i?'Copied!':'Copy'}</span>
-                        </button>
-                        <button onClick={() => speak(m.content,i)} style={actionBtn(speaking===i,'#00c6ff')}
-                          onMouseEnter={e=>e.currentTarget.style.background='rgba(0,198,255,0.1)'}
-                          onMouseLeave={e=>e.currentTarget.style.background=speaking===i?'rgba(0,198,255,0.1)':'rgba(255,255,255,0.04)'}>
-                          {speaking===i?'⏹':'🔊'} <span style={{fontSize:11}}>{speaking===i?'Stop':'Listen'}</span>
-                        </button>
+                        <button onClick={() => retry(i)} style={actionBtn(false,'#00c6ff')} onMouseEnter={e=>e.currentTarget.style.background='rgba(0,198,255,0.1)'} onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'}>🔄 <span style={{fontSize:11}}>Retry</span></button>
+                        <button onClick={() => react(i,'like')} style={actionBtn(reactions[i]==='like','#56d364')} onMouseEnter={e=>e.currentTarget.style.background='rgba(86,211,100,0.1)'} onMouseLeave={e=>e.currentTarget.style.background=reactions[i]==='like'?'rgba(86,211,100,0.1)':'rgba(255,255,255,0.04)'}>👍</button>
+                        <button onClick={() => react(i,'dislike')} style={actionBtn(reactions[i]==='dislike','#f85149')} onMouseEnter={e=>e.currentTarget.style.background='rgba(248,81,73,0.1)'} onMouseLeave={e=>e.currentTarget.style.background=reactions[i]==='dislike'?'rgba(248,81,73,0.1)':'rgba(255,255,255,0.04)'}>👎</button>
+                        <button onClick={() => copyMessage(m.content,i)} style={actionBtn(copied===i,'#8a2be2')} onMouseEnter={e=>e.currentTarget.style.background='rgba(138,43,226,0.1)'} onMouseLeave={e=>e.currentTarget.style.background=copied===i?'rgba(138,43,226,0.1)':'rgba(255,255,255,0.04)'}>{copied===i?'✅':'📋'} <span style={{fontSize:11}}>{copied===i?'Copied!':'Copy'}</span></button>
+                        <button onClick={() => speak(m.content,i)} style={actionBtn(speaking===i,'#00c6ff')} onMouseEnter={e=>e.currentTarget.style.background='rgba(0,198,255,0.1)'} onMouseLeave={e=>e.currentTarget.style.background=speaking===i?'rgba(0,198,255,0.1)':'rgba(255,255,255,0.04)'}>{speaking===i?'⏹':'🔊'} <span style={{fontSize:11}}>{speaking===i?'Stop':'Listen'}</span></button>
                       </div>
                     )}
                   </div>
@@ -445,7 +544,7 @@ export default function Dashboard() {
 
             <div style={{padding:'12px 20px 16px',borderTop:'1px solid rgba(255,255,255,0.06)'}}>
               <input ref={fileRef} type="file"
-                accept={mode==='video' ? 'video/*,image/*,.pdf,.txt,.doc,.docx,.csv,.json,.md' : 'image/*,.pdf,.txt,.doc,.docx,.csv,.json,.md'}
+                accept={mode==='video'?'video/*,image/*,.pdf,.txt,.doc,.docx,.csv,.json,.md':'image/*,.pdf,.txt,.doc,.docx,.csv,.json,.md'}
                 onChange={handleFile} style={{display:'none'}}/>
               <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',borderRadius:14,background:'rgba(255,255,255,0.04)',border:`1px solid ${loading?currentColor+'40':'rgba(255,255,255,0.09)'}`,transition:'border 0.3s'}}>
                 <button onClick={() => fileRef.current?.click()} title="Attach file"
@@ -457,9 +556,9 @@ export default function Dashboard() {
                   onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}}
                   onInput={e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,140)+'px';}}
                   placeholder={
-                    mode==='agent' ? 'Describe a complex task for COGNORYX Agents...' :
-                    mode==='code'  ? 'Paste code or describe what you need...' :
-                    mode==='video' ? 'Attach a video and ask anything about it...' :
+                    mode==='agent'?'Describe a complex task for COGNORYX Agents...':
+                    mode==='code' ?'Paste code or describe what you need...':
+                    mode==='video'?'Attach a video and ask anything about it...':
                     'Message COGNORYX...'}
                   rows={1}
                   style={{flex:1,background:'transparent',border:'none',outline:'none',color:'#e8e8f0',fontSize:14,resize:'none',lineHeight:1.5,fontFamily:'inherit'}}/>
