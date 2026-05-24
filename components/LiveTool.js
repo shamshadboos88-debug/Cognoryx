@@ -120,7 +120,7 @@ export default function LiveTool() {
     setPhase('thinking');
 
     // Build messages array with history for context
-    const messages = [
+    const msgs = [
       ...historyRef.current,
       { role: 'user', content: userText }
     ];
@@ -130,40 +130,17 @@ export default function LiveTool() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages,
+          messages: msgs,
+          message: userText,       // ✅ send both for compatibility
           mode: 'chat',
           systemPrompt: SYSTEM_PROMPT,
-          stream: false, // no streaming for voice
+          stream: false,           // ✅ simple JSON response for voice
         }),
       });
 
-      let reply = '';
-
-      // Handle streaming response (read full text)
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n').filter(l => l.startsWith('data: '));
-        for (const line of lines) {
-          const data = line.replace('data: ', '').trim();
-          if (data === '[DONE]') break;
-          try {
-            const parsed = JSON.parse(data);
-            reply += parsed.text || parsed.content || parsed.delta || '';
-          } catch {}
-        }
-      }
-
-      // Fallback if streaming parse failed
-      if (!reply) {
-        const data = await res.json().catch(() => ({}));
-        reply = data.message || data.text || data.content || "I'm here to help!";
-      }
-
-      reply = reply.trim() || "I'm here to help!";
+      // ✅ Simple JSON parse — no streaming reader
+      const data = await res.json();
+      const reply = (data.reply || data.text || data.content || data.message || "I'm here to help!").trim();
 
       // Save to history
       const updatedHistory = [
@@ -171,9 +148,8 @@ export default function LiveTool() {
         { role: 'user', content: userText },
         { role: 'assistant', content: reply },
       ];
-      // Keep only last 10 messages for context
-      const trimmed = updatedHistory.slice(-10);
-      setChatHistory(trimmed);
+      historyRef.current = updatedHistory.slice(-10);
+      setChatHistory(historyRef.current);
 
       addLine('ai', reply);
       speak(reply);
