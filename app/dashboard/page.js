@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -8,6 +7,7 @@ import {
   orderBy, limit, doc, updateDoc, serverTimestamp
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import { saveFeedback } from '@/lib/feedback';
 import dynamic from 'next/dynamic';
 import CognoryxThinking from '@/components/CognoryxThinking';
 import NewChatPopup from '@/components/NewChatPopup';
@@ -66,17 +66,14 @@ export default function Dashboard() {
   const [copied, setCopied]           = useState(null);
   const [mode, setMode]               = useState('chat');
   const [streamEnabled]               = useState(true);
-
-  // ── Chat history state ──────────────────────────────────
-  const [chatHistory, setChatHistory] = useState([]);   // [{id, title, createdAt}]
-  const [activeChatId, setActiveChatId] = useState(null); // current Firestore doc id
+  const [chatHistory, setChatHistory] = useState([]);
+  const [activeChatId, setActiveChatId] = useState(null);
   const [historyLoading, setHistoryLoading] = useState(false);
 
   const inputRef  = useRef(null);
   const bottomRef = useRef(null);
   const fileRef   = useRef(null);
 
-  // ── Auth ────────────────────────────────────────────────
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, u => {
       if (!u) router.push('/login');
@@ -89,7 +86,6 @@ export default function Dashboard() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  // ── Load chat history from Firestore ────────────────────
   const loadChatHistory = async (uid) => {
     setHistoryLoading(true);
     try {
@@ -113,7 +109,6 @@ export default function Dashboard() {
     }
   };
 
-  // ── Save / update chat in Firestore ─────────────────────
   const saveChatToFirestore = async (uid, msgs, existingId = null) => {
     if (!msgs || msgs.length < 2) return existingId;
     const firstUserMsg = msgs.find(m => m.role === 'user')?.content || 'New chat';
@@ -126,7 +121,6 @@ export default function Dashboard() {
     try {
       if (existingId) {
         await updateDoc(doc(db, 'users', uid, 'chats', existingId), payload);
-        // Update local history title
         setChatHistory(h => h.map(c => c.id === existingId ? { ...c, title } : c));
         return existingId;
       } else {
@@ -134,7 +128,6 @@ export default function Dashboard() {
           ...payload,
           createdAt: serverTimestamp(),
         });
-        // Prepend to local history
         setChatHistory(h => [{ id: ref.id, title, messages: msgs }, ...h.slice(0, 19)]);
         return ref.id;
       }
@@ -144,22 +137,17 @@ export default function Dashboard() {
     }
   };
 
-  // ── Load a past chat ────────────────────────────────────
   const loadChat = (chat) => {
     setMessages(chat.messages || []);
     setActiveChatId(chat.id);
     setActive('chat');
     setAttachment(null);
+    setReactions({});
   };
 
-  // ── New chat ────────────────────────────────────────────
   const handleNewChat = () => {
-    if (messages.length > 0) {
-      setSavedMsgs(messages);
-      setShowPopup(true);
-    } else {
-      startFreshChat();
-    }
+    if (messages.length > 0) { setSavedMsgs(messages); setShowPopup(true); }
+    else { startFreshChat(); }
   };
 
   const startFreshChat = () => {
@@ -168,9 +156,9 @@ export default function Dashboard() {
     setActive('chat');
     setActiveChatId(null);
     setShowPopup(false);
+    setReactions({});
   };
 
-  // ── Helpers ─────────────────────────────────────────────
   const handleSignOut = async () => { await signOut(auth); router.push('/login'); };
 
   const copyMessage = (text, i) => {
@@ -178,7 +166,25 @@ export default function Dashboard() {
     setCopied(i); setTimeout(() => setCopied(null), 2000);
   };
 
-  const react = (i, type) => setReactions(r => ({ ...r, [i]: r[i] === type ? null : type }));
+  // ✅ FEEDBACK — saves to Firestore when user likes/dislikes
+  const react = (i, type) => {
+    const prev = reactions[i];
+    const newType = prev === type ? null : type;
+    setReactions(r => ({ ...r, [i]: newType }));
+
+    if (newType && user) {
+      const userMsg = messages[i - 1]?.content || '';
+      const aiReply = messages[i]?.content || '';
+      saveFeedback({
+        uid:            user.uid,
+        userEmail:      user.email,
+        messageContent: userMsg,
+        aiReply:        aiReply,
+        reaction:       newType,
+        mode,
+      });
+    }
+  };
 
   const retry = async (i) => {
     const prev = messages[i - 1];
@@ -212,7 +218,6 @@ export default function Dashboard() {
     e.target.value = '';
   };
 
-  // ── Core send ────────────────────────────────────────────
   const sendMessage = async (text, att) => {
     setLoading(true);
     let finalMsgs = [];
@@ -232,7 +237,6 @@ export default function Dashboard() {
           const reader = res.body.getReader();
           const decoder = new TextDecoder();
           let buffer = '';
-          let aiContent = '';
 
           while (true) {
             const { done, value } = await reader.read();
@@ -250,7 +254,6 @@ export default function Dashboard() {
                       return finalMsgs;
                     });
                   } else if (data.text) {
-                    aiContent += data.text;
                     setMessages(m => {
                       finalMsgs = m.map((msg, i) => i === m.length - 1 ? { ...msg, content: msg.content + data.text } : msg);
                       return finalMsgs;
@@ -274,7 +277,6 @@ export default function Dashboard() {
         setMessages(m => { finalMsgs = [...m, { role: 'ai', content: data.reply || '⚠️ No response', provider: data.provider }]; return finalMsgs; });
       }
 
-      // ✅ Save to Firestore after AI replies
       if (user && finalMsgs.length >= 2) {
         const newId = await saveChatToFirestore(user.uid, finalMsgs, activeChatId);
         if (!activeChatId) setActiveChatId(newId);
@@ -352,16 +354,13 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── SIDEBAR ─────────────────────────────────────── */}
+      {/* SIDEBAR */}
       <aside style={{width:220,background:'#0d0d14',borderRight:'1px solid rgba(255,255,255,0.07)',display:'flex',flexDirection:'column',flexShrink:0,padding:'12px 0',overflow:'hidden'}}>
-
-        {/* Logo */}
         <div style={{display:'flex',alignItems:'center',gap:8,padding:'4px 14px 12px'}}>
           <img src="/cognoryx-logo.svg" alt="COGNORYX" style={{width:28,height:28,objectFit:'contain'}}/>
           <span style={{fontWeight:600,fontSize:15,letterSpacing:'0.5px'}}>COGNORYX</span>
         </div>
 
-        {/* New Chat button */}
         <div style={{padding:'0 10px 8px'}}>
           <button onClick={handleNewChat} style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderRadius:8,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',color:'#e8e8f0',cursor:'pointer',fontSize:13,fontFamily:'inherit',transition:'all 0.2s'}}
             onMouseEnter={e=>e.currentTarget.style.background='rgba(0,198,255,0.1)'}
@@ -370,9 +369,7 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* ✅ REAL CHAT HISTORY */}
         <div style={{padding:'4px 14px 6px',fontSize:10,fontWeight:600,color:'rgba(255,255,255,0.3)',letterSpacing:'1px'}}>RECENT</div>
-
         <div style={{flex:1,overflowY:'auto',paddingBottom:8}}>
           {historyLoading ? (
             <div style={{padding:'10px 14px',fontSize:12,color:'rgba(255,255,255,0.3)'}}>Loading...</div>
@@ -381,20 +378,10 @@ export default function Dashboard() {
           ) : (
             chatHistory.map(chat => (
               <button key={chat.id} onClick={() => loadChat(chat)}
-                style={{
-                  display:'flex', alignItems:'center', gap:8,
-                  padding:'7px 14px',
-                  background: activeChatId === chat.id ? 'rgba(0,198,255,0.08)' : 'transparent',
-                  border:'none',
-                  borderLeft: activeChatId === chat.id ? '2px solid #00c6ff' : '2px solid transparent',
-                  color: activeChatId === chat.id ? '#e8e8f0' : 'rgba(255,255,255,0.5)',
-                  cursor:'pointer', fontSize:12, textAlign:'left', width:'100%',
-                  transition:'all 0.15s',
-                }}
+                style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',background:activeChatId===chat.id?'rgba(0,198,255,0.08)':'transparent',border:'none',borderLeft:activeChatId===chat.id?'2px solid #00c6ff':'2px solid transparent',color:activeChatId===chat.id?'#e8e8f0':'rgba(255,255,255,0.5)',cursor:'pointer',fontSize:12,textAlign:'left',width:'100%',transition:'all 0.15s'}}
                 onMouseEnter={e=>{ if(activeChatId!==chat.id) e.currentTarget.style.background='rgba(255,255,255,0.05)'; }}
                 onMouseLeave={e=>{ if(activeChatId!==chat.id) e.currentTarget.style.background='transparent'; }}
-                title={chat.title}
-              >
+                title={chat.title}>
                 <span style={{fontSize:11,flexShrink:0}}>💬</span>
                 <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{chat.title}</span>
               </button>
@@ -402,7 +389,6 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Tools section */}
         <div style={{padding:'4px 14px 6px',fontSize:10,fontWeight:600,color:'rgba(255,255,255,0.3)',letterSpacing:'1px'}}>TOOLS</div>
         {TOOLS.map(t => (
           <button key={t.id} onClick={() => t.id==='talk' ? setShowLive(true) : setActive(t.id)}
@@ -411,7 +397,6 @@ export default function Dashboard() {
           </button>
         ))}
 
-        {/* User footer */}
         <div style={{padding:'10px 14px 6px',borderTop:'1px solid rgba(255,255,255,0.06)',marginTop:8}}>
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
             <div style={{width:28,height:28,borderRadius:'50%',background:'linear-gradient(135deg,#00c6ff,#8a2be2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,color:'#fff',flexShrink:0}}>
@@ -427,12 +412,11 @@ export default function Dashboard() {
         </div>
       </aside>
 
-      {/* ── MAIN ────────────────────────────────────────── */}
+      {/* MAIN */}
       <main style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-
         <div style={{padding:'10px 20px',borderBottom:'1px solid rgba(255,255,255,0.06)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
           <div style={{fontSize:14,color:'rgba(255,255,255,0.7)'}}>
-            {activeTool==='chat' ? (activeChatId ? (chatHistory.find(c=>c.id===activeChatId)?.title||'Chat') : 'New Chat') : TOOLS.find(t=>t.id===activeTool)?.label||'New Chat'}
+            {activeTool==='chat'?(activeChatId?(chatHistory.find(c=>c.id===activeChatId)?.title||'Chat'):'New Chat'):TOOLS.find(t=>t.id===activeTool)?.label||'New Chat'}
           </div>
           {activeTool === 'chat' && (
             <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
