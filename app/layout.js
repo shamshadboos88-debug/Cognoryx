@@ -66,7 +66,6 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="COGNORYX" />
-        {/* ✅ Updated to new COGNORYX logo */}
         <link rel="icon" href="/favicon.png" type="image/png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512x512.png" />
@@ -82,18 +81,29 @@ export default function RootLayout({ children }) {
       </head>
       <body>
         <SplashWrapper>{children}</SplashWrapper>
+
+        {/* ✅ FIXED: Removed setTimeout — SW registers immediately on load for better PWA score */}
         <script dangerouslySetInnerHTML={{
           __html: `
             window.addEventListener('load', function() {
               if ('serviceWorker' in navigator) {
-                setTimeout(function() {
-                  navigator.serviceWorker.register('/sw.js', { scope: '/' })
-                    .then(function(reg) {
-                      console.log('[SW] Registered');
-                      setInterval(function() { reg.update(); }, 60000);
-                    })
-                    .catch(function(e) { console.log('[SW] Failed:', e); });
-                }, 1000);
+                navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                  .then(function(reg) {
+                    console.log('[SW] Registered');
+                    // Check for updates every 60s
+                    setInterval(function() { reg.update(); }, 60000);
+                    // Tell new SW to activate immediately
+                    if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                    reg.addEventListener('updatefound', function() {
+                      const newWorker = reg.installing;
+                      newWorker.addEventListener('statechange', function() {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                          newWorker.postMessage({ type: 'SKIP_WAITING' });
+                        }
+                      });
+                    });
+                  })
+                  .catch(function(e) { console.log('[SW] Failed:', e); });
               }
               window.addEventListener('beforeinstallprompt', function(e) {
                 e.preventDefault();

@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // ✅ ADDED useSearchParams
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import {
   collection, addDoc, getDocs, query,
@@ -52,6 +52,8 @@ const modeColors = { chat: '#00c6ff', code: '#56d364', agent: '#f0883e', video: 
 
 export default function Dashboard() {
   const router = useRouter();
+  const searchParams = useSearchParams(); // ✅ ADDED
+
   const [user, setUser]               = useState(null);
   const [activeTool, setActive]       = useState('chat');
   const [input, setInput]             = useState('');
@@ -73,6 +75,17 @@ export default function Dashboard() {
   const inputRef  = useRef(null);
   const bottomRef = useRef(null);
   const fileRef   = useRef(null);
+
+  // ✅ ADDED: Read URL params so PWA shortcuts work
+  // manifest.json shortcuts use ?mode=chat, ?mode=image, ?mode=live
+  useEffect(() => {
+    const m = searchParams.get('mode');
+    if (m === 'image') setActive('image');
+    else if (m === 'live') setShowLive(true);
+    else if (m === 'chat') { setActive('chat'); setMode('chat'); }
+    else if (m === 'code') { setActive('chat'); setMode('code'); }
+    else if (m === 'agent') { setActive('chat'); setMode('agent'); }
+  }, [searchParams]);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, u => {
@@ -166,7 +179,6 @@ export default function Dashboard() {
     setCopied(i); setTimeout(() => setCopied(null), 2000);
   };
 
-  // ✅ FEEDBACK — saves to Firestore when user likes/dislikes
   const react = (i, type) => {
     const prev = reactions[i];
     const newType = prev === type ? null : type;

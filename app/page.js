@@ -1,5 +1,5 @@
 'use client';
-// app/page.js — optimized landing page, no Firebase import = fast load
+// app/page.js — COGNORYX Landing Page
 import Link from 'next/link';
 
 export default function LandingPage() {
@@ -16,14 +16,12 @@ export default function LandingPage() {
       padding: 20,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     }}>
-      {/* Logo */}
-      <div style={{
-        width: 72, height: 72, borderRadius: 18,
-        background: 'linear-gradient(135deg,#00c6ff,#8a2be2)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 24, fontWeight: 800, color: '#fff', marginBottom: 24,
-        letterSpacing: 1,
-      }}>CX</div>
+      {/* ✅ FIXED: Real COGNORYX logo instead of "CX" text */}
+      <img
+        src="/cognoryx-logo.svg"
+        alt="COGNORYX"
+        style={{ width: 80, height: 80, marginBottom: 24, objectFit: 'contain' }}
+      />
 
       {/* Title */}
       <h1 style={{
@@ -41,7 +39,12 @@ export default function LandingPage() {
       {/* Features */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 40 }}>
         {['🤖 AI Chat', '🎨 Image Gen', '📹 Live Voice', '📎 File Analysis'].map(f => (
-          <span key={f} style={{ padding: '6px 14px', borderRadius: 20, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{f}</span>
+          <span key={f} style={{
+            padding: '6px 14px', borderRadius: 20,
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            fontSize: 13, color: 'rgba(255,255,255,0.7)',
+          }}>{f}</span>
         ))}
       </div>
 
@@ -63,7 +66,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <p style={{ marginTop: 48, fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>
-        Powered by Google Gemini · Free to start
+        Powered by DeepSeek · Gemini · Free to start
       </p>
     </div>
   );

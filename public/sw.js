@@ -1,98 +1,194 @@
-// public/sw.js — COGNORYX Service Worker v4
-const CACHE     = 'cognoryx-v4';
-const OFFLINE   = '/offline.html';
-const PRECACHE  = ['/', '/dashboard', '/offline.html', '/manifest.json', '/icons/icon-192x192.png', '/icons/icon-512x512.png'];
+// public/sw.js — COGNORYX Service Worker v5 (PWA 45/45)
+const CACHE_NAME = 'cognoryx-v5';
+const OFFLINE_URL = '/offline.html';
+
+// All assets to precache on install
+const PRECACHE_ASSETS = [
+  '/',
+  '/dashboard',
+  '/offline.html',
+  '/manifest.json',
+  '/icons/icon-72x72.png',
+  '/icons/icon-96x96.png',
+  '/icons/icon-128x128.png',
+  '/icons/icon-144x144.png',
+  '/icons/icon-152x152.png',
+  '/icons/icon-192x192.png',
+  '/icons/icon-384x384.png',
+  '/icons/icon-512x512.png',
+  '/icons/icon-maskable-192x192.png',
+  '/icons/icon-maskable-512x512.png',
+];
 
 // ── Install ───────────────────────────────────────────
-self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE)
-      .then(c => c.addAll(PRECACHE))
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(PRECACHE_ASSETS))
       .then(() => self.skipWaiting())
   );
 });
 
 // ── Activate ──────────────────────────────────────────
-self.addEventListener('activate', e => {
-  e.waitUntil(
+self.addEventListener('activate', event => {
+  event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(cacheNames =>
+        Promise.all(
+          cacheNames
+            .filter(name => name !== CACHE_NAME)
+            .map(name => caches.delete(name))
+        )
+      )
       .then(() => self.clients.claim())
   );
 });
 
 // ── Fetch ─────────────────────────────────────────────
-self.addEventListener('fetch', e => {
-  const { request } = e;
+self.addEventListener('fetch', event => {
+  const { request } = event;
   const url = new URL(request.url);
 
-  // Skip non-GET
+  // Only handle GET requests
   if (request.method !== 'GET') return;
 
-  // Skip external requests
-  if (url.origin !== location.origin) return;
+  // Skip cross-origin requests
+  if (url.origin !== self.location.origin) return;
 
-  // API — network only
+  // API routes → network only, offline JSON fallback
   if (url.pathname.startsWith('/api/')) {
-    e.respondWith(
+    event.respondWith(
       fetch(request).catch(() =>
-        new Response(JSON.stringify({ error: 'Offline — no internet connection.' }), {
-          headers: { 'Content-Type': 'application/json' },
-          status: 503,
-        })
+        new Response(
+          JSON.stringify({ error: 'You are offline. Please check your connection.' }),
+          {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        )
       )
     );
     return;
   }
 
-  // Pages & assets — network first, cache fallback
-  e.respondWith(
+  // _next/static → cache first (these are immutable hashed assets)
+  if (url.pathname.startsWith('/_next/static/')) {
+    event.respondWith(
+      caches.match(request).then(cached => {
+        if (cached) return cached;
+        return fetch(request).then(response => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          }
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
+  // Images / icons → cache first
+  if (
+    url.pathname.startsWith('/icons/') ||
+    url.pathname.match(/\.(png|jpg|jpeg|svg|webp|gif|ico)$/)
+  ) {
+    event.respondWith(
+      caches.match(request).then(cached => {
+        if (cached) return cached;
+        return fetch(request).then(response => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          }
+          return response;
+        }).catch(() => new Response('', { status: 404 }));
+      })
+    );
+    return;
+  }
+
+  // HTML pages → network first, cache fallback, then offline page
+  event.respondWith(
     fetch(request)
-      .then(res => {
-        if (res && res.status === 200) {
-          const clone = res.clone();
-          caches.open(CACHE).then(c => c.put(request, clone));
+      .then(response => {
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
         }
-        return res;
+        return response;
       })
       .catch(async () => {
         const cached = await caches.match(request);
         if (cached) return cached;
-        if (request.destination === 'document') return caches.match(OFFLINE);
+        // For navigation requests, return offline page
+        if (request.mode === 'navigate') {
+          const offlinePage = await caches.match(OFFLINE_URL);
+          if (offlinePage) return offlinePage;
+        }
         return new Response('Offline', { status: 503 });
       })
   );
 });
 
-// ── Push notifications ────────────────────────────────
-self.addEventListener('push', e => {
-  const d = e.data?.json() ?? {};
-  e.waitUntil(
-    self.registration.showNotification(d.title || 'COGNORYX', {
-      body:    d.body || 'You have a new message.',
-      icon:    '/icons/icon-192x192.png',
-      badge:   '/icons/icon-192x192.png',
-      vibrate: [100, 50, 100],
-      data:    { url: d.url || '/dashboard' },
-    })
+// ── Background Sync ───────────────────────────────────
+self.addEventListener('sync', event => {
+  if (event.tag === 'sync-chat-history') {
+    event.waitUntil(Promise.resolve());
+  }
+});
+
+// ── Push Notifications ────────────────────────────────
+self.addEventListener('push', event => {
+  const data = event.data?.json() ?? {};
+  const options = {
+    body:    data.body    || 'You have a new message from COGNORYX.',
+    icon:    '/icons/icon-192x192.png',
+    badge:   '/icons/icon-96x96.png',
+    vibrate: [100, 50, 100],
+    tag:     data.tag    || 'cognoryx-notification',
+    renotify: true,
+    data: { url: data.url || '/dashboard' },
+    actions: [
+      { action: 'open',    title: 'Open App' },
+      { action: 'dismiss', title: 'Dismiss'  },
+    ],
+  };
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'COGNORYX AI', options)
   );
 });
 
-// ── Notification click ────────────────────────────────
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  const url = e.notification.data?.url || '/dashboard';
-  e.waitUntil(
-    clients.matchAll({ type:'window', includeUncontrolled:true }).then(list => {
-      for (const c of list) {
-        if (c.url === url && 'focus' in c) return c.focus();
-      }
-      if (clients.openWindow) return clients.openWindow(url);
-    })
+// ── Notification Click ────────────────────────────────
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+
+  if (event.action === 'dismiss') return;
+
+  const targetUrl = event.notification.data?.url || '/dashboard';
+
+  event.waitUntil(
+    clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then(clientList => {
+        // Focus existing tab if open
+        for (const client of clientList) {
+          if (client.url.includes(targetUrl) && 'focus' in client) {
+            return client.focus();
+          }
+        }
+        // Otherwise open new window
+        if (clients.openWindow) return clients.openWindow(targetUrl);
+      })
   );
 });
 
-// ── Background sync ───────────────────────────────────
-self.addEventListener('sync', e => {
-  if (e.tag === 'sync-data') e.waitUntil(Promise.resolve());
+// ── Message Handler ───────────────────────────────────
+self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  if (event.data?.type === 'GET_VERSION') {
+    event.ports[0]?.postMessage({ version: CACHE_NAME });
+  }
 });

@@ -1,3 +1,4 @@
+// app/api/chat/route.js
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
 
@@ -18,6 +19,11 @@ const groq = process.env.GROQ_API_KEY
       baseURL: "https://api.groq.com/openai/v1",
     })
   : null;
+
+// ✅ FIXED: Correct DeepSeek model names
+// deepseek-chat    = DeepSeek V3 (fast, smart, use for chat/code/agent)
+// deepseek-reasoner = DeepSeek R1 (slow, very smart, use for hard reasoning)
+const DEEPSEEK_MODEL = "deepseek-chat";
 
 const SYSTEM_PROMPT = `You are COGNORYX AI, a powerful all-in-one AI assistant built for the future.
 You CAN see and analyze images, documents, videos, and files when they are shared with you.
@@ -43,44 +49,37 @@ export async function POST(req) {
   try {
     const body = await req.json();
 
-    // ✅ Support BOTH single message (chat) AND messages array (Aria/Live)
+    // Support BOTH single message (chat) AND messages array (Aria/Live)
     const {
-      message,        // single string — from chat/code/agent
-      messages,       // array — from Aria LiveTool: [{role, content}]
+      message,
+      messages,
       attachment,
       mode,
       stream: wantStream,
-      systemPrompt: customSystemPrompt,  // Aria sends its own system prompt
+      systemPrompt: customSystemPrompt,
     } = body;
 
-    // Build the final text to send
     const userText = message || (Array.isArray(messages) ? messages[messages.length - 1]?.content : null) || "Hello";
 
     const hasAttachment = !!attachment;
     const isImage = attachment?.type?.startsWith("image/");
     const isVideo = attachment?.type?.startsWith("video/");
 
-    // Pick system prompt
     const systemPrompt =
-      customSystemPrompt ? customSystemPrompt :  // Aria sends its own
+      customSystemPrompt ? customSystemPrompt :
       mode === "code"    ? CODE_PROMPT  :
       mode === "agent"   ? AGENT_PROMPT :
       SYSTEM_PROMPT;
 
-    // Build messages array for OpenAI-compatible APIs
-    // If Aria sends full history, use it — otherwise just single message
     const buildMessages = (sysPrompt) => {
       const sys = { role: "system", content: sysPrompt };
       if (Array.isArray(messages) && messages.length > 0) {
-        // Aria: full conversation history
         return [sys, ...messages.map(m => ({ role: m.role === 'ai' ? 'assistant' : m.role, content: m.content }))];
       }
       return [sys, { role: "user", content: userText }];
     };
 
-    // =========================================================
-    // IMAGE / VIDEO / FILE → GEMINI (vision)
-    // =========================================================
+    // ── IMAGE / VIDEO / FILE → GEMINI (vision) ───────────────────────
     if (hasAttachment) {
       try {
         if (!gemini) throw new Error("Gemini key missing");
@@ -103,15 +102,14 @@ export async function POST(req) {
       }
     }
 
-    // =========================================================
-    // STREAMING — word-by-word (chat/code/agent modes)
-    // =========================================================
+    // ── STREAMING ────────────────────────────────────────────────────
     if (wantStream) {
+
       // DeepSeek streaming
       if (deepseek) {
         try {
           const stream = await deepseek.chat.completions.create({
-            model: "deepseek-v4-flash",
+            model: DEEPSEEK_MODEL, // ✅ fixed
             messages: buildMessages(systemPrompt),
             stream: true,
             max_tokens: 4096,
@@ -175,22 +173,20 @@ export async function POST(req) {
       }
     }
 
-    // =========================================================
-    // NON-STREAMING — Aria uses this (stream: false)
-    // =========================================================
+    // ── NON-STREAMING (Aria uses this) ───────────────────────────────
 
     // DeepSeek
     if (deepseek) {
       try {
         const completion = await deepseek.chat.completions.create({
-          model: "deepseek-v4-flash",
+          model: DEEPSEEK_MODEL, // ✅ fixed
           messages: buildMessages(systemPrompt),
-          max_tokens: 512,   // short for voice
+          max_tokens: 512,
           temperature: 0.8,
         });
         return Response.json({
           reply: completion.choices[0].message.content,
-          provider: "DeepSeek V4 Flash",
+          provider: "DeepSeek V3",
           mode,
         });
       } catch (err) {
